@@ -60,6 +60,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -89,7 +91,7 @@ import kotlinx.coroutines.delay
 
 /** The slim strip on the left: one button per screen. */
 @Composable
-fun Rail(current: Screen, signedIn: Boolean, me: Pair<String, String?>?, onPick: (Screen) -> Unit) {
+fun Rail(current: Screen, signedIn: Boolean, me: Pair<String, String?>?, onSwipe: (down: Boolean) -> Unit = {}, onPick: (Screen) -> Unit) {
     val p = LocalPalette.current
     // Every button spread evenly down the full height: no dead gap, more room for thumbs.
     Column(
@@ -98,6 +100,17 @@ fun Rail(current: Screen, signedIn: Boolean, me: Pair<String, String?>?, onPick:
             .fillMaxHeight()
             .background(p.rail)
             .border(width = 0.5.dp, color = p.railLine)
+            // Swipe down the sidebar to send the app to the bottom screen, up to send it to the top.
+            .pointerInput(Unit) {
+                var drag = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { drag = 0f },
+                    onDragEnd = {
+                        if (drag > 90.dp.toPx()) onSwipe(true)
+                        else if (drag < -90.dp.toPx()) onSwipe(false)
+                    },
+                ) { _, dy -> drag += dy }
+            }
             .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceEvenly,

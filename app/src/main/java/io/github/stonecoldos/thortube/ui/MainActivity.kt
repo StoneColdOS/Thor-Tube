@@ -252,7 +252,7 @@ class MainActivity : ComponentActivity() {
                                 me = if (signedIn) runCatching { YouTubeFeed.me() }.getOrNull() else null
                                 if (signedIn) AppLog.d(TAG, "Account: name=${me?.first?.isNotBlank()} photo=${me?.second}")
                             }
-                            Rail(screen, signedIn, me) { screen = it }
+                            Rail(screen, signedIn, me, onSwipe = { down -> moveScreen(down) }) { screen = it }
                             Crossfade(screen, Modifier.weight(1f).fillMaxSize(), animationSpec = tween(180), label = "screen") { s ->
                                 Box(Modifier.fillMaxSize()) {
                                     when (s) {
@@ -304,8 +304,64 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         nowPlaying?.let { YouTubeHistory.flush(it.video.url, player.currentPosition / 1000f) }
-        player.pause()
+        if (!moving) player.pause()
         super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (moving) {
+            moving = false
+            if (resumeAfterMove) player.play()
+        }
+    }
+
+    // ---------------------------------------------------------------- moving between the Thor's screens
+
+    private var moving = false
+    private var resumeAfterMove = false
+    private var pendingStartMs = 0L
+
+    /** The Thor's top screen is the default display; the bottom one is the other built-in screen. */
+    private fun otherScreenId(down: Boolean): Int? = if (!down) android.view.Display.DEFAULT_DISPLAY else
+        getSystemService(android.hardware.display.DisplayManager::class.java).displays.firstOrNull {
+            it.displayId != android.view.Display.DEFAULT_DISPLAY && it.isValid &&
+                (it.flags and android.view.Display.FLAG_PRIVATE) == 0
+        }?.displayId
+
+    /** Swipe on the sidebar: send the whole app to the bottom screen (down) or the top one (up). */
+    fun moveScreen(down: Boolean) {
+        val here = display?.displayId ?: android.view.Display.DEFAULT_DISPLAY
+        val target = otherScreenId(down)
+        if (target == null) return say("Couldn't find the bottom screen")
+        if (target == here) return say(if (down) "Already on the bottom screen" else "Already on the top screen")
+        AppLog.i(TAG, "Moving from display $here to $target")
+        resumeAfterMove = player.playWhenReady
+        moving = true
+        val options = android.app.ActivityOptions.makeBasic().setLaunchDisplayId(target).toBundle()
+        startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), options)
+        // Android normally carries the running app across. If it didn't, start over on the other
+        // screen and pick the video back up where it was.
+        lifecycleScope.launch {
+            delay(1_200)
+            if ((display?.displayId ?: here) != here) {
+                AppLog.i(TAG, "Moved to display $target")
+                return@launch
+            }
+            AppLog.w(TAG, "Android kept us on display $here; relaunching on $target")
+            val restart = Intent(applicationContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            nowPlaying?.let {
+                restart.putExtra(EXTRA_URL, it.video.url)
+                restart.putExtra(EXTRA_POSITION, player.currentPosition)
+            }
+            val ctx = applicationContext
+            moving = false
+            finishAndRemoveTask()
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                runCatching { ctx.startActivity(restart, options) }
+                    .onFailure { AppLog.w(TAG, "Relaunch on display $target failed", it) }
+            }, 350)
+        }
     }
 
     override fun onDestroy() {
@@ -316,6 +372,8 @@ class MainActivity : ComponentActivity() {
     private fun handleLink(intent: Intent?) {
         intent?.getStringExtra(EXTRA_URL)?.let { url ->
             intent.removeExtra(EXTRA_URL)
+            pendingStartMs = intent.getLongExtra(EXTRA_POSITION, 0L)
+            intent.removeExtra(EXTRA_POSITION)
             open(Video(url, "", 0, ""), emptyList())
         }
         intent?.getStringExtra(EXTRA_CHANNEL)?.let {
@@ -619,7 +677,7 @@ class MainActivity : ComponentActivity() {
                 playerProblem = "This video can't be played here."
                 return
             }
-            playAttempt(0)
+            playAttempt(pendingStartMs.also { pendingStartMs = 0 })
             YouTubeHistory.start(video.url, durationSecs)
         } catch (e: Exception) {
             AppLog.e(TAG, "Couldn't load ${video.url}", e)
@@ -1077,6 +1135,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_URL = "io.github.stonecoldos.thortube.URL"
         const val EXTRA_CHANNEL = "io.github.stonecoldos.thortube.CHANNEL"
+        const val EXTRA_POSITION = "io.github.stonecoldos.thortube.POSITION"
         private const val TAG = "ThorTube"
     }
 }
