@@ -92,10 +92,9 @@ void main() {
     float row = floor(gl_FragCoord.y / 3.0);
     uv.x += (hash(vec2(row, floor(uTime * 30.0))) - 0.5) * 0.02 * uStatic;
 
-    // A worn-out set: the picture sways a little, and every so often it shakes.
-    float burst = step(0.9, hash(vec2(floor(uTime * 1.5), 3.1)));
-    uv.x += sin(uv.y * 6.0 + uTime * 1.3) * 0.0015 * uJunk;
-    uv.x += sin(uv.y * 40.0 + uTime * 25.0) * 0.006 * burst * uJunk;
+    // A worn-out set: once every few minutes the picture loses vertical hold for a split second.
+    float hiccup = step(0.997, hash(vec2(floor(uTime * 2.0), 9.0))) * step(fract(uTime * 2.0), 0.25);
+    uv.y = fract(uv.y + 0.06 * hiccup * uJunk);
 
     vec3 col;
     if (uCrt > 0.5) {
@@ -143,8 +142,8 @@ void main() {
         if (uJunk > 0.0) {
             // Washed-out blacks, a dark bar slowly rolling up, and an uneven flicker.
             col = mix(vec3(0.07), col, 1.0 - 0.22 * uJunk);
-            float y = fract(uv.y + uTime * 0.05) - 0.5;
-            col *= 1.0 - 0.22 * exp(-y * y * 60.0) * uJunk;
+            float y = fract(uv.y + uTime * 0.025) - 0.5;
+            col *= 1.0 - 0.1 * exp(-y * y * 60.0) * uJunk;
             col *= 1.0 - 0.07 * hash(vec2(floor(uTime * 12.0), 7.0)) * uJunk;
         }
 

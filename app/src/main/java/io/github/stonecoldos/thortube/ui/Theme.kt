@@ -68,7 +68,7 @@ enum class CrtMode(val label: String, val blurb: String) {
     OFF("Off", "Plain, sharp video."),
     NINETIES("90s tube", "A curved tube with heavy scanlines and glowing phosphor stripes."),
     NOUGHTIES("2000s flat", "A flat 2000s set: sharp and bright edge to edge, faint lines, punchy color."),
-    JUNK("Garage set", "A worn-out black and white TV. Fuzzy, ghosty, and it shakes now and then."),
+    JUNK("Garage set", "A worn-out black and white TV. Fuzzy and ghosty, and it slips once in a while."),
 }
 
 /** Saved choices. */
