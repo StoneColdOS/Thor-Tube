@@ -302,6 +302,7 @@ class MainActivity : ComponentActivity() {
         }
         selectTab(0)
         handleLink(intent)
+        checkForUpdate()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -476,6 +477,41 @@ class MainActivity : ComponentActivity() {
     var toast by mutableStateOf<String?>(null)
         private set
     private var toastJob: Job? = null
+
+    // ---------------------------------------------------------------- update check
+
+    /** A newer release to mention on Home, or null. */
+    var update by mutableStateOf<io.github.stonecoldos.thortube.UpdateCheck.Update?>(null)
+        private set
+    /** One line for Setup > About. */
+    var updateStatus by mutableStateOf(if (io.github.stonecoldos.thortube.UpdateCheck.enabled) "Checking for updates..." else "Test build (no update check)")
+        private set
+
+    private fun checkForUpdate() {
+        if (!io.github.stonecoldos.thortube.UpdateCheck.enabled) return
+        lifecycleScope.launch {
+            delay(3_000)
+            io.github.stonecoldos.thortube.UpdateCheck.check(this@MainActivity).fold(
+                { u ->
+                    update = u
+                    updateStatus = if (u != null) "v${u.version} is available" else "Up to date"
+                },
+                { updateStatus = "Couldn't check for updates" },
+            )
+        }
+    }
+
+    fun openUpdate() {
+        val u = update ?: return
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(u.url))) }
+            .onFailure { say("Couldn't open the browser") }
+    }
+
+    fun updateLater() {
+        val u = update ?: return
+        io.github.stonecoldos.thortube.UpdateCheck.later(this, u.version)
+        update = null
+    }
 
     /** Setup > Share logs: hand the private log files to Android's share sheet. */
     fun shareLogs() {

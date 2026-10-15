@@ -57,6 +57,7 @@ The same list is in Setup > Controls.
 - Logs stay in the app's private storage and never contain video links, titles, searches or account details. Setup > **Share logs** sends them through Android's share menu if something goes wrong.
 - Encrypted connections only; plain HTTP is blocked.
 - Release builds are signed with a private key and aren't debuggable.
+- Release builds check this repo's public releases page for a newer version, at most every 6 hours. The check sends nothing about you or the device, and only shows a Download / Later banner; nothing installs by itself.
 
 ## How it works
 

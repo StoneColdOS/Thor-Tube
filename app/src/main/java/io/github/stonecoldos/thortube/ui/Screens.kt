@@ -211,6 +211,23 @@ fun HomeScreen(app: MainActivity) {
     val p = LocalPalette.current
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
+        app.update?.let { u ->
+            Row(
+                Modifier
+                    .padding(start = 10.dp, end = 10.dp, top = 8.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(p.card)
+                    .border(1.dp, p.accent, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("Thor-Tube v${u.version} is out", color = p.text, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Pill("Download", primary = true) { app.openUpdate() }
+                Pill("Later") { app.updateLater() }
+            }
+        }
         // Tabs.
         val chips = rememberLazyListState()
         LaunchedEffect(app.tab) { chips.animateScrollToItem(app.tab) }
@@ -729,6 +746,11 @@ fun SetupScreen(app: MainActivity) {
         item {
             Section("About") {
                 Text("Thor-Tube ${BuildConfig.VERSION_NAME}. Unofficial; not made by YouTube or AYN.", color = p.dim, fontSize = 9.sp)
+                Text(app.updateStatus, color = if (app.update != null) p.accent else p.dim, fontSize = 9.sp, fontWeight = if (app.update != null) FontWeight.Bold else FontWeight.Normal)
+                if (app.update != null) {
+                    Spacer(Modifier.height(6.dp))
+                    Pill("Get v${app.update?.version}", primary = true) { app.openUpdate() }
+                }
                 Spacer(Modifier.height(8.dp))
                 Pill("Share logs") { app.shareLogs() }
                 Text("Sends this app's logs (no video links, searches or account details) through Android's share menu.", color = p.dim, fontSize = 9.sp, modifier = Modifier.padding(top = 4.dp))
