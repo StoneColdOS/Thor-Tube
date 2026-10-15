@@ -100,7 +100,7 @@ fun Rail(current: Screen, signedIn: Boolean, me: Pair<String, String?>?, onPick:
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("TT", color = p.accent, fontWeight = FontWeight.Black, fontSize = 14.sp, modifier = Modifier.padding(bottom = 8.dp))
+        TvLogo(p.accent, Modifier.padding(bottom = 6.dp).size(34.dp))
         Column(
             Modifier.weight(1f),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -134,6 +134,34 @@ fun Rail(current: Screen, signedIn: Boolean, me: Pair<String, String?>?, onPick:
                         androidx.compose.ui.geometry.Size(size.width * 0.56f, size.height * 0.5f), style = Stroke(size.width * 0.07f, cap = StrokeCap.Round))
                 }
             }
+        }
+    }
+}
+
+/** The app icon in miniature: a 3D TV with rabbit ears and a hammer on the screen. */
+@Composable
+fun TvLogo(accent: Color, modifier: Modifier) {
+    Canvas(modifier) {
+        val k = size.width / 92f   // drawn on a 92 x 92 grid
+        fun o(x: Float, y: Float) = Offset((x - 14f) * k, (y - 6f) * k)
+        fun poly(vararg pts: Pair<Float, Float>) = Path().apply {
+            pts.forEachIndexed { i, (x, y) -> if (i == 0) moveTo(o(x, y).x, o(x, y).y) else lineTo(o(x, y).x, o(x, y).y) }
+            close()
+        }
+        val ant = Color(0xFF9AA0AC)
+        drawLine(ant, o(44f, 30f), o(30f, 12f), 3f * k, StrokeCap.Round)
+        drawLine(ant, o(56f, 30f), o(72f, 13f), 3f * k, StrokeCap.Round)
+        drawCircle(ant, 4f * k, o(29f, 11f))
+        drawCircle(ant, 4f * k, o(73f, 12f))
+        drawPath(poly(14f to 36f, 36f to 24f, 106f to 24f, 84f to 36f), androidx.compose.ui.graphics.lerp(accent, Color.Black, 0.25f))
+        drawPath(poly(84f to 36f, 106f to 24f, 106f to 84f, 84f to 98f), androidx.compose.ui.graphics.lerp(accent, Color.Black, 0.55f))
+        drawRoundRect(accent, o(14f, 36f), Size(70f * k, 62f * k), CornerRadius(8f * k))
+        drawRoundRect(Color(0xFF0A0C10), o(21f, 43f), Size(56f * k, 48f * k), CornerRadius(7f * k))
+        val hammer = Color(0xFFF2F4F7)
+        androidx.compose.ui.graphics.drawscope.rotate(-30f, o(49f, 67f)) {
+            drawRoundRect(hammer, o(37f, 49f), Size(24f * k, 16f * k), CornerRadius(2.5f * k))
+            drawRoundRect(hammer, o(46.5f, 64f), Size(5f * k, 20f * k), CornerRadius(2f * k))
+            drawRoundRect(hammer, o(45f, 82f), Size(8f * k, 4.5f * k), CornerRadius(2f * k))
         }
     }
 }
