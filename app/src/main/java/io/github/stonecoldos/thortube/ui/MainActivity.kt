@@ -55,6 +55,9 @@ import io.github.stonecoldos.thortube.player.PlaybackAttempt
 import io.github.stonecoldos.thortube.player.PlaybackPlanner
 import io.github.stonecoldos.thortube.player.StreamCache
 import io.github.stonecoldos.thortube.youtube.YouTubeAccount
+import io.github.stonecoldos.thortube.youtube.YouTubeFeed
+import io.github.stonecoldos.thortube.youtube.YtChannel
+import io.github.stonecoldos.thortube.youtube.YtPlaylist
 import io.github.stonecoldos.thortube.youtube.YouTubeHistory
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Job
@@ -86,6 +89,13 @@ data class ThreadUi(
     val items: List<Comment> = emptyList(),
     val next: org.schabi.newpipe.extractor.Page? = null,
     val loading: Boolean = false,
+)
+
+/** Your playlists in the Library. */
+data class PlaylistsUi(
+    val items: List<io.github.stonecoldos.thortube.youtube.YtPlaylist> = emptyList(),
+    val loading: Boolean = false,
+    val error: String? = null,
 )
 
 /** The player screen's details about what's on. */
@@ -176,6 +186,8 @@ class MainActivity : ComponentActivity() {
                                     when (s) {
                                         Screen.HOME -> HomeScreen(this@MainActivity)
                                         Screen.SEARCH -> SearchScreen(this@MainActivity)
+                                        Screen.SUBS -> SubsScreen(this@MainActivity)
+                                        Screen.LIBRARY -> LibraryScreen(this@MainActivity)
                                         Screen.SETUP -> SetupScreen(this@MainActivity)
                                         else -> ComingSoon(s)
                                     }
@@ -279,12 +291,21 @@ class MainActivity : ComponentActivity() {
 
     var minimized by mutableStateOf(false)
         private set
+    /** The video filling the whole screen. */
+    var fullscreen by mutableStateOf(false)
+
+    fun toggleFullscreen() {
+        if (nowPlaying == null || minimized) return
+        fullscreen = !fullscreen
+        controlsPing++
+    }
     var commentsPageOpen by mutableStateOf(false)
         private set
 
     /** Shrink the video into the corner and keep it playing. */
     fun minimize() {
         if (nowPlaying == null) return
+        fullscreen = false
         minimized = true
         playerShown.targetState = false
     }
@@ -337,6 +358,7 @@ class MainActivity : ComponentActivity() {
         tickJob?.cancel()
         player.stop()
         nowPlaying = null
+        fullscreen = false
         minimized = false
         commentsPageOpen = false
         playerShown.targetState = false
@@ -442,6 +464,113 @@ class MainActivity : ComponentActivity() {
                 playerProblem = "Couldn't play this video (${error.errorCodeName})."
             }
         }
+    }
+
+    // ---------------------------------------------------------------- subscriptions
+
+    var subsChannels by mutableStateOf<List<YtChannel>>(emptyList())
+        private set
+    /** -1 = everyone. */
+    var subsSelected by mutableStateOf(-1)
+        private set
+    var subsFeed by mutableStateOf(FeedState())
+        private set
+    private var subsJob: Job? = null
+
+    fun loadSubs(index: Int, refresh: Boolean = true) {
+        if (!refresh && subsSelected == index && subsFeed.videos.isNotEmpty() &&
+            System.currentTimeMillis() - subsFeed.at < 10 * 60_000L
+        ) return
+        subsSelected = index
+        subsFeed = FeedState(loading = true)
+        subsJob?.cancel()
+        subsJob = lifecycleScope.launch {
+            val params = subsChannels.getOrNull(index)?.params
+            subsFeed = runCatching { YouTubeFeed.subscriptions(params) }.fold(
+                { page ->
+                    if (index == -1 && page.channels.isNotEmpty()) subsChannels = page.channels
+                    FeedState(page.videos, at = System.currentTimeMillis())
+                },
+                {
+                    AppLog.w(TAG, "Subscriptions failed", it)
+                    FeedState(error = "Couldn't load your subscriptions.")
+                },
+            )
+            Thumbnails.prefetch(subsFeed.videos.take(24).map { it.thumbnail })
+        }
+    }
+
+    // ---------------------------------------------------------------- library
+
+    var libTab by mutableStateOf(LibTab.HISTORY)
+    val libFeeds = mutableStateMapOf<LibTab, FeedState>()
+    var libPlaylists by mutableStateOf(PlaylistsUi())
+        private set
+    var openPlaylist by mutableStateOf<YtPlaylist?>(null)
+        private set
+    var playlistFeed by mutableStateOf(FeedState())
+        private set
+    var playlistRound by mutableStateOf(0)
+        private set
+
+    fun loadLibrary(tab: LibTab, refresh: Boolean) {
+        if (tab == LibTab.PLAYLISTS) {
+            if (!refresh && libPlaylists.items.isNotEmpty()) return
+            libPlaylists = PlaylistsUi(libPlaylists.items, loading = true)
+            lifecycleScope.launch {
+                libPlaylists = runCatching { YouTubeFeed.playlists() }.fold(
+                    { PlaylistsUi(it) },
+                    {
+                        AppLog.w(TAG, "Playlists failed", it)
+                        PlaylistsUi(error = "Couldn't load your playlists.")
+                    },
+                )
+            }
+            return
+        }
+        val have = libFeeds[tab]
+        // History changes as you watch, so it refreshes more eagerly.
+        val maxAge = if (tab == LibTab.HISTORY) 60_000L else 10 * 60_000L
+        if (!refresh && have != null && have.error == null && System.currentTimeMillis() - have.at < maxAge) return
+        if (have?.loading == true) return
+        libFeeds[tab] = (have ?: FeedState()).copy(loading = true, error = null)
+        lifecycleScope.launch {
+            val result = runCatching {
+                when (tab) {
+                    LibTab.HISTORY -> YouTubeFeed.history()
+                    LibTab.WATCH_LATER -> YouTubeFeed.watchLater()
+                    LibTab.LIKED -> YouTubeFeed.liked()
+                    LibTab.PLAYLISTS -> emptyList()
+                }
+            }
+            libFeeds[tab] = result.fold(
+                { FeedState(it, at = System.currentTimeMillis()) },
+                {
+                    AppLog.w(TAG, "${tab.label} failed", it)
+                    FeedState(libFeeds[tab]?.videos.orEmpty(), error = "Couldn't load ${tab.label}.")
+                },
+            )
+            Thumbnails.prefetch(libFeeds[tab]?.videos.orEmpty().take(24).map { it.thumbnail })
+        }
+    }
+
+    fun openPlaylist(pl: YtPlaylist) {
+        openPlaylist = pl
+        playlistRound++
+        playlistFeed = FeedState(loading = true)
+        lifecycleScope.launch {
+            playlistFeed = runCatching { YouTubeFeed.playlist(pl.browseId) }.fold(
+                { FeedState(it, at = System.currentTimeMillis()) },
+                {
+                    AppLog.w(TAG, "Playlist ${pl.browseId} failed", it)
+                    FeedState(error = "Couldn't load this playlist.")
+                },
+            )
+        }
+    }
+
+    fun closePlaylist() {
+        openPlaylist = null
     }
 
     // ---------------------------------------------------------------- search
@@ -563,6 +692,11 @@ class MainActivity : ComponentActivity() {
             }
             KeyEvent.KEYCODE_BUTTON_L1, KeyEvent.KEYCODE_BUTTON_R1 -> {
                 if (down && event.repeatCount == 0) shoulder(if (event.keyCode == KeyEvent.KEYCODE_BUTTON_L1) -1 else 1)
+                return true
+            }
+            // Y fills the screen with the video (and back).
+            KeyEvent.KEYCODE_BUTTON_Y -> {
+                if (down && event.repeatCount == 0 && nowPlaying != null && !minimized) toggleFullscreen()
                 return true
             }
             // X brings a minimized video back.
@@ -693,6 +827,11 @@ class MainActivity : ComponentActivity() {
         YouTubeAccount.signOut()
         YouTubeHistory.reset()
         signedIn = false
+        subsChannels = emptyList()
+        subsFeed = FeedState()
+        libFeeds.clear()
+        libPlaylists = PlaylistsUi()
+        openPlaylist = null
         reloadFeeds()
     }
 

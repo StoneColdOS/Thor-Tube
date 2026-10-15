@@ -100,8 +100,8 @@ private fun VideoSurface(app: MainActivity, modifier: Modifier) {
 @Composable
 fun PlayerScreen(app: MainActivity, np: NowPlaying) {
     val p = LocalPalette.current
-    // Back shrinks the video into the corner instead of stopping it.
-    BackHandler { app.minimize() }
+    // Back leaves full screen first, then shrinks the video into the corner instead of stopping it.
+    BackHandler { if (app.fullscreen) app.fullscreen = false else app.minimize() }
     var controls by remember { mutableStateOf(true) }
     var lastPoke by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(app.controlsPing) {
@@ -129,9 +129,7 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
     Column(Modifier.fillMaxSize().background(p.bg)) {
         // The video. Tap for controls, swipe down to shrink it. Controller: A pauses, left/right skip 10 s.
         Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f)
+            (if (app.fullscreen) Modifier.fillMaxSize() else Modifier.fillMaxWidth().aspectRatio(16f / 9f))
                 .background(Color.Black)
                 .focusRequester(videoFocus)
                 .onKeyEvent { e ->
@@ -148,7 +146,14 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
                     var drag = 0f
                     detectVerticalDragGestures(
                         onDragStart = { drag = 0f },
-                        onDragEnd = { if (drag > 60.dp.toPx()) app.minimize() },
+                        onDragEnd = {
+                            // Swipe up to fill the screen; swipe down to leave full screen, then to shrink.
+                            when {
+                                drag < -60.dp.toPx() && !app.fullscreen -> app.toggleFullscreen()
+                                drag > 60.dp.toPx() && app.fullscreen -> app.toggleFullscreen()
+                                drag > 60.dp.toPx() -> app.minimize()
+                            }
+                        },
                     ) { _, dy -> drag += dy }
                 }
                 .clickable(indication = null, interactionSource = null) {
@@ -172,6 +177,15 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
             }
         }
 
+        if (!app.fullscreen) PlayerDetails(app, np, showInfo, activeList)
+    }
+}
+
+/** Everything under the video: title, creator, and the Up next / Comments tabs. */
+@Composable
+private fun androidx.compose.foundation.layout.ColumnScope.PlayerDetails(app: MainActivity, np: NowPlaying, showInfo: Boolean, activeList: LazyListState) {
+    val p = LocalPalette.current
+    run {
         AnimatedVisibility(showInfo, enter = expandVertically(tween(200)) + fadeIn(tween(200)), exit = shrinkVertically(tween(200)) + fadeOut(tween(150))) {
             Column(Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 6.dp)) {
                 Text(np.title, color = p.text, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -196,7 +210,7 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
             Chip("Up next", app.playerTab == PlayerTab.UP_NEXT) { app.playerTab = PlayerTab.UP_NEXT }
             Chip(commentsLabel(app.comments), app.playerTab == PlayerTab.COMMENTS) { app.playerTab = PlayerTab.COMMENTS }
             Spacer(Modifier.weight(1f))
-            if (app.playerTab == PlayerTab.COMMENTS) Pill("⤢ Full screen") { app.openCommentsPage() }
+            if (app.playerTab == PlayerTab.COMMENTS) Pill("⤢ Expand") { app.openCommentsPage() }
         }
         AnimatedContent(
             targetState = app.playerTab,
@@ -248,6 +262,7 @@ private fun PlayerControls(app: MainActivity) {
             RoundButton("+10") { app.seekBy(10_000) }
         }
         RoundButton("⌄", modifier = Modifier.align(Alignment.TopStart).padding(8.dp)) { app.minimize() }
+        RoundButton(if (app.fullscreen) "⤡" else "⛶", modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) { app.toggleFullscreen() }
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 10.dp)) {
             Text(
                 "${formatDuration(app.positionMs / 1000).ifEmpty { "0:00" }} / ${formatDuration(app.durationMs / 1000).ifEmpty { "--:--" }}",

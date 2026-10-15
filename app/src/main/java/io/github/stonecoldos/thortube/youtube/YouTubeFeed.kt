@@ -12,6 +12,15 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 
+/** A playlist on your account (yours or saved). [browseId] starts with "VL". */
+data class YtPlaylist(val browseId: String, val title: String, val thumbnail: String, val subtitle: String)
+
+/** A channel you're subscribed to; [params] narrows the subscriptions feed to just them. */
+data class YtChannel(val name: String, val avatar: String, val browseId: String, val params: String?)
+
+/** What one signed-in page holds. */
+data class YtPage(val videos: List<Video>, val playlists: List<YtPlaylist>, val channels: List<YtChannel>)
+
 /**
  * Your YouTube home screen (and subscriptions), read the way the YouTube TV app reads them:
  * signed in, as a grid of "tiles". Ads, Shorts and live streams are left out.
@@ -25,16 +34,27 @@ object YouTubeFeed {
         "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/25.lts.30.1034943-gold (unlike Gecko), Unknown_TV_Unknown_0/Unknown (Unknown, Unknown)"
     private val JSON = "application/json".toMediaType()
 
-    /** The TV app's home screen is "default"; subscriptions are "FEsubscriptions". */
-    suspend fun home(want: Int = 60): List<Video> = load("default", want)
+    /** The TV app's home screen is "default". */
+    suspend fun home(want: Int = 60): List<Video> = page("default", want = want).videos
 
-    suspend fun subscriptions(want: Int = 60): List<Video> = load("FEsubscriptions", want)
+    /** Your subscriptions feed, plus the list of channels you're subscribed to. Pass a channel's [YtChannel.params] for just that one. */
+    suspend fun subscriptions(params: String? = null, want: Int = 60): YtPage = page("FEsubscriptions", params, want)
+
+    suspend fun history(want: Int = 60): List<Video> = page("FEhistory", want = want).videos
+    suspend fun watchLater(want: Int = 100): List<Video> = page("VLWL", want = want).videos
+    suspend fun liked(want: Int = 100): List<Video> = page("VLLL", want = want).videos
+    suspend fun playlists(): List<YtPlaylist> = page("FEplaylist_aggregation", want = 0).playlists
+    suspend fun playlist(browseId: String, want: Int = 100): List<Video> = page(browseId, want = want).videos
 
     /** First page, then follow "more" tokens (whole sections first, then single shelves) until there's enough. */
-    private suspend fun load(browseId: String, want: Int): List<Video> = withContext(Dispatchers.IO) {
+    suspend fun page(browseId: String, params: String? = null, want: Int = 60): YtPage = withContext(Dispatchers.IO) {
         val videos = LinkedHashMap<String, Video>()
-        val first = Page.parse(browse(JSONObject().put("browseId", browseId)) ?: return@withContext emptyList())
+        val request = JSONObject().put("browseId", browseId)
+        if (params != null) request.put("params", params)
+        val first = Page.parse(browse(request) ?: return@withContext YtPage(emptyList(), emptyList(), emptyList()))
         first.videos.forEach { videos.putIfAbsent(it.url, it) }
+        val playlists = LinkedHashMap<String, YtPlaylist>()
+        first.playlists.forEach { playlists.putIfAbsent(it.browseId, it) }
         val sections = ArrayDeque(first.sections)
         val shelves = ArrayDeque(first.shelves)
         var requests = 1
@@ -44,11 +64,12 @@ object YouTubeFeed {
                 .onFailure { AppLog.d(TAG, "YouTube page failed: ${it.message}") }.getOrNull() ?: break
             requests++
             page.videos.forEach { videos.putIfAbsent(it.url, it) }
+            page.playlists.forEach { playlists.putIfAbsent(it.browseId, it) }
             sections.addAll(page.sections)
             shelves.addAll(page.shelves)
         }
-        AppLog.i(TAG, "YouTube $browseId: ${videos.size} videos in $requests requests")
-        videos.values.toList()
+        AppLog.i(TAG, "YouTube $browseId: ${videos.size} videos, ${playlists.size} playlists, ${first.channels.size} channels in $requests requests")
+        YtPage(videos.values.toList(), playlists.values.toList(), first.channels)
     }
 
     /** One signed-in request. Retries once with a fresh token if YouTube says it's stale. */
@@ -92,7 +113,13 @@ object YouTubeFeed {
     }
 
     /** What one response holds: videos, plus tokens for more. */
-    private class Page(val videos: List<Video>, val sections: List<String>, val shelves: List<String>) {
+    private class Page(
+        val videos: List<Video>,
+        val sections: List<String>,
+        val shelves: List<String>,
+        val playlists: List<YtPlaylist> = emptyList(),
+        val channels: List<YtChannel> = emptyList(),
+    ) {
         companion object {
             private val DURATION = Regex("""^\d{1,2}(:\d{2}){1,2}$""")
 
@@ -100,12 +127,24 @@ object YouTubeFeed {
                 val videos = ArrayList<Video>()
                 val sections = ArrayList<String>()
                 val shelves = ArrayList<String>()
+                val playlists = ArrayList<YtPlaylist>()
+                val channels = ArrayList<YtChannel>()
                 fun walk(o: Any?, ad: Boolean, inShelf: Boolean) {
                     when (o) {
                         is JSONObject -> o.keys().forEach { k ->
                             val v = o.opt(k)
                             when {
-                                k == "tileRenderer" && v is JSONObject -> if (!ad) tile(v)?.let(videos::add)
+                                k == "tileRenderer" && v is JSONObject -> if (!ad) {
+                                    if (v.optString("contentType") == "TILE_CONTENT_TYPE_PLAYLIST") playlist(v)?.let(playlists::add)
+                                    else tile(v)?.let(videos::add)
+                                }
+                                // Older TV layout, still used on some pages (history, channels).
+                                k == "gridVideoRenderer" && v is JSONObject -> if (!ad) gridVideo(v)?.let(videos::add)
+                                // The subscriptions page's left column: one tab per channel you follow.
+                                k == "tvSecondaryNavSectionRenderer" && v is JSONObject && channels.isEmpty() -> {
+                                    channels += navChannels(v)
+                                    walk(v, ad, inShelf)
+                                }
                                 k == "nextContinuationData" && v is JSONObject ->
                                     v.optString("continuation").takeIf { it.isNotEmpty() }?.let { (if (inShelf) shelves else sections) += it }
                                 else -> walk(v, ad || k == "adSlotRenderer", inShelf || k == "horizontalListRenderer")
@@ -115,7 +154,68 @@ object YouTubeFeed {
                     }
                 }
                 walk(root, false, false)
-                return Page(videos, sections, shelves)
+                return Page(videos, sections, shelves, playlists, channels)
+            }
+
+            private fun bestImage(o: JSONObject?): String {
+                val list = o?.optJSONArray("thumbnails") ?: return ""
+                val url = list.optJSONObject(list.length() - 1)?.optString("url").orEmpty()
+                return if (url.startsWith("//")) "https:$url" else url
+            }
+
+            private fun navChannels(section: JSONObject): List<YtChannel> {
+                val tabs = section.optJSONArray("tabs") ?: return emptyList()
+                return (0 until tabs.length()).mapNotNull { i ->
+                    val tab = tabs.optJSONObject(i)?.optJSONObject("tabRenderer") ?: return@mapNotNull null
+                    val ep = tab.optJSONObject("endpoint")?.optJSONObject("browseEndpoint") ?: return@mapNotNull null
+                    val params = ep.optString("params").ifEmpty { null } ?: return@mapNotNull null   // "All" has none
+                    YtChannel(
+                        name = tab.optString("title").ifEmpty { text(tab.optJSONObject("title")) },
+                        avatar = bestImage(tab.optJSONObject("thumbnail")),
+                        browseId = ep.optString("browseId"),
+                        params = params,
+                    )
+                }
+            }
+
+            private fun playlist(t: JSONObject): YtPlaylist? {
+                val browse = t.optJSONObject("onSelectCommand")?.optJSONObject("browseEndpoint")?.optString("browseId")
+                    ?.ifEmpty { null } ?: t.optString("contentId").ifEmpty { null }?.let { if (it.startsWith("VL")) it else "VL$it" }
+                    ?: return null
+                val md = t.optJSONObject("metadata")?.optJSONObject("tileMetadataRenderer")
+                val lines = md?.optJSONArray("lines")?.let { ls ->
+                    (0 until ls.length()).flatMap { li ->
+                        val items = ls.optJSONObject(li)?.optJSONObject("lineRenderer")?.optJSONArray("items")
+                        (0 until (items?.length() ?: 0)).map { text(items!!.optJSONObject(it)?.optJSONObject("lineItemRenderer")?.optJSONObject("text")).trim() }
+                    }
+                }.orEmpty().filter { it.isNotEmpty() && it != "•" }
+                return YtPlaylist(
+                    browseId = browse,
+                    title = text(md?.optJSONObject("title")),
+                    thumbnail = bestImage(t.optJSONObject("header")?.optJSONObject("tileHeaderRenderer")?.optJSONObject("thumbnail")),
+                    subtitle = lines.joinToString(" · "),
+                )
+            }
+
+            private fun gridVideo(g: JSONObject): Video? {
+                val id = g.optString("videoId").ifEmpty { return null }
+                var duration = ""
+                g.optJSONArray("thumbnailOverlays")?.let { overlays ->
+                    for (i in 0 until overlays.length()) {
+                        val st = overlays.optJSONObject(i)?.optJSONObject("thumbnailOverlayTimeStatusRenderer") ?: continue
+                        if (st.optString("style") in setOf("LIVE", "UPCOMING", "SHORTS")) return null
+                        duration = text(st.optJSONObject("text"))
+                    }
+                }
+                val whenText = text(g.optJSONObject("publishedTimeText"))
+                return Video(
+                    url = "https://www.youtube.com/watch?v=$id",
+                    title = text(g.optJSONObject("title")),
+                    durationSecs = if (DURATION.matches(duration)) seconds(duration) else -1,
+                    uploaded = whenText,
+                    uploadedAt = approxTime(whenText),
+                    uploaderName = text(g.optJSONObject("shortBylineText")),
+                )
             }
 
             private fun text(o: JSONObject?): String {
