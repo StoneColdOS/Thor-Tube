@@ -33,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
 import androidx.core.view.WindowCompat
@@ -241,7 +242,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             val palette = paletteFor(theme, isSystemInDarkTheme())
             CompositionLocalProvider(LocalPalette provides palette) {
-                Box(Modifier.fillMaxSize().background(palette.bg)) {
+                Box(Modifier.fillMaxSize().background(Color.Black)) {
+                Box(Modifier.fillMaxSize().crtPower(power.value).background(palette.bg)) {
                     // The player slides up over everything. Once it fully covers the screen, the screens
                     // underneath step aside so the controller can't wander behind it; they come back
                     // (scrolled to where you were) the moment it starts sliding away.
@@ -289,6 +291,7 @@ class MainActivity : ComponentActivity() {
                         lastPlaying?.let { MiniPlayer(this@MainActivity, it, Modifier) }
                     }
                     Toast(toast, Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp))
+                }
                     ScreenBanner(screenBanner, Modifier.align(Alignment.Center))
                 }
             }
@@ -320,6 +323,15 @@ class MainActivity : ComponentActivity() {
     // ---------------------------------------------------------------- moving between the Thor's screens
 
     private var moving = false
+    /** CRT power effect: 1 = picture fully on, 0 = collapsed to a dot. */
+    val power = androidx.compose.animation.core.Animatable(1f)
+
+    private suspend fun powerOff() = power.animateTo(0f, androidx.compose.animation.core.tween(320, easing = androidx.compose.animation.core.FastOutLinearInEasing))
+    private suspend fun powerOn() {
+        power.snapTo(0f)
+        power.animateTo(1f, androidx.compose.animation.core.tween(520, easing = androidx.compose.animation.core.LinearOutSlowInEasing))
+    }
+
     /** Shown for a moment after a move: true = arrived on the bottom screen, false = the top. */
     var screenBanner by mutableStateOf<Boolean?>(null)
         private set
@@ -359,14 +371,18 @@ class MainActivity : ComponentActivity() {
         resumeAfterMove = player.playWhenReady
         moving = true
         val options = android.app.ActivityOptions.makeBasic().setLaunchDisplayId(target).toBundle()
-        startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), options)
-        // Android normally carries the running app across. If it didn't, start over on the other
-        // screen and pick the video back up where it was.
         lifecycleScope.launch {
+            // The old TV switch-off: picture squeezes to a white line, then a dot.
+            powerOff()
+            startActivity(Intent(this@MainActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), options)
+            // Android normally carries the running app across. If it didn't, start over on the other
+            // screen and pick the video back up where it was.
             repeat(12) {
                 delay(100)
                 if ((display?.displayId ?: here) != here) {
                     AppLog.i(TAG, "Moved to display $target")
+                    buzz()
+                    launch { powerOn() }
                     announceScreen(down)
                     return@launch
                 }
@@ -396,6 +412,8 @@ class MainActivity : ComponentActivity() {
     private fun handleLink(intent: Intent?) {
         intent?.getIntExtra(EXTRA_MOVED, -1)?.takeIf { it >= 0 }?.let {
             intent.removeExtra(EXTRA_MOVED)
+            buzz()
+            lifecycleScope.launch { powerOn() }
             announceScreen(it == 1)
         }
         intent?.getStringExtra(EXTRA_URL)?.let { url ->
