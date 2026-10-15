@@ -1,0 +1,13 @@
+.gradle/
+build/
+/local.properties
+/.idea/
+*.iml
+.DS_Store
+captures/
+.kotlin/
+*.jks
+*.keystore
+
+# Shared debug key so test builds install over each other. Not used for releases.
+!app/debug.keystore
