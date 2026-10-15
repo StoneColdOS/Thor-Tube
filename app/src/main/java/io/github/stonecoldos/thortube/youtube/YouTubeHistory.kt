@@ -58,7 +58,7 @@ object YouTubeHistory {
         scope.launch {
             lock.withLock {
                 val s = runCatching { open(id, lengthSec) }
-                    .onFailure { AppLog.d(TAG, "No YouTube history for $id: ${it.message}") }
+                    .onFailure { AppLog.d(TAG, "No YouTube history for this video: ${it.javaClass.simpleName}") }
                     .getOrNull()
                 if (pendingId == id) {
                     session = s
@@ -107,7 +107,7 @@ object YouTubeHistory {
             ping(token, "playback", s, "final" to "1")
             ping(token, "watchtime", s, "final" to "1", "st" to fmt(len), "et" to fmt(len))
             s.finished = true
-            AppLog.d(TAG, "YouTube history: ${s.videoId} watched to the end")
+            AppLog.d(TAG, "YouTube history: watched to the end")
             return
         }
         val now = System.currentTimeMillis()
@@ -116,7 +116,7 @@ object YouTubeHistory {
             s.recordAt = now
         }
         ping(token, "watchtime", s, "len" to fmt(len), "st" to fmt(fromSec), "et" to fmt(toSec), "cmt" to fmt(toSec))
-        AppLog.d(TAG, "YouTube history: ${s.videoId} at ${toSec.toInt()}s")
+        AppLog.d(TAG, "YouTube history: reported progress")
     }
 
     private fun ping(token: String, kind: String, s: Session, vararg extra: Pair<String, String>) {
@@ -183,7 +183,7 @@ object YouTubeHistory {
         val of = q.getQueryParameter("of").orEmpty()
         val len = lengthSec.takeIf { it > 0 }?.toFloat()
             ?: json.optJSONObject("videoDetails")?.optString("lengthSeconds")?.toFloatOrNull() ?: 0f
-        AppLog.d(TAG, "YouTube history on for $id")
+        AppLog.d(TAG, "YouTube history on")
         return Session(id, len, cpn(), ei, vm, of)
     }
 

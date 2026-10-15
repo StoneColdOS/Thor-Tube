@@ -15,7 +15,9 @@ android {
         // CI passes the run number so every test build has a higher version than the last.
         val build = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionCode = build
-        versionName = "0.0.1-dev.$build"
+        // A release tag like v0.1.0 names the release build; everything else is a numbered test build.
+        val tag = System.getenv("GITHUB_REF_NAME")?.takeIf { it.matches(Regex("v\\d+\\.\\d+\\.\\d+.*")) }
+        versionName = tag?.removePrefix("v") ?: "0.0.1-dev.$build"
     }
 
     signingConfigs {
@@ -32,8 +34,8 @@ android {
             create("release") {
                 storeFile = file(storeFilePath)
                 storePassword = System.getenv("THOR_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("THOR_KEY_ALIAS")
-                keyPassword = System.getenv("THOR_KEY_PASSWORD")
+                keyAlias = System.getenv("THOR_KEY_ALIAS") ?: "thortube"
+                keyPassword = System.getenv("THOR_KEY_PASSWORD") ?: System.getenv("THOR_KEYSTORE_PASSWORD")
             }
         }
     }
@@ -44,6 +46,7 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
+            // Not debuggable (the default for release): nobody with a USB cable can reach the app's data.
             // The extractor relies on reflection-heavy libraries; keep shrinking off until it's tested.
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("release")

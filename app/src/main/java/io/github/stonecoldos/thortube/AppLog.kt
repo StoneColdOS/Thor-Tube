@@ -14,14 +14,13 @@ import java.util.Locale
 import java.util.concurrent.Executors
 
 /**
- * Logs to logcat AND to a file on the Thor, so testing doesn't need adb:
- *   Download/Thor-Tube-logs/thor.log           this run
- *   Download/Thor-Tube-logs/thor-previous.log  the run before
- *   Download/Thor-Tube-logs/thor-crash.txt     last crash, if any
- * Line one of every log says which build and device it came from.
- *
- * If Download isn't writable (e.g. files left over from an older install that Android
- * no longer lets us touch), it falls back to Android/data/<package>/files/logs.
+ * Logs to logcat AND to a file kept inside the app's private storage (no other app can read it):
+ *   thor.log           this run
+ *   thor-previous.log  the run before
+ *   thor-crash.txt     last crash, if any
+ * Setup > Share logs sends them on through Android's share sheet.
+ * Line one of every log says which build and device it came from. Logs never hold video links,
+ * titles, searches or account details.
  */
 object AppLog {
 
@@ -29,11 +28,8 @@ object AppLog {
     private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
     @Volatile private var logFile: File? = null
     @Volatile private var crashFile: File? = null
-    @Volatile private var appContext: Context? = null
-    @Volatile private var lastScan = 0L
 
     fun init(context: Context) {
-        appContext = context.applicationContext
         val dir = pickDir(context)
         val current = File(dir, "thor.log")
         val previous = File(dir, "thor-previous.log")
@@ -57,7 +53,6 @@ object AppLog {
             val trace = stackTrace(error)
             runCatching {
                 crashFile?.writeText("Crash in ${thread.name} at ${Date()}\n${pm.versionName}\n$trace")
-                crashFile?.let { android.media.MediaScannerConnection.scanFile(context, arrayOf(it.absolutePath), null, null) }
                 logFile?.appendText("${now()} CRASH ${thread.name}\n$trace")
             }
             previousHandler?.uncaughtException(thread, error)
@@ -81,40 +76,24 @@ object AppLog {
         val file = logFile ?: return
         writer.execute {
             runCatching { FileWriter(file, true).use { it.write(text) } }
-            // Files written straight to Download don't show in the Files app until Android's
-            // media index hears about them, so nudge it now and then.
-            val now = System.currentTimeMillis()
-            if (now - lastScan > 5_000) {
-                lastScan = now
-                appContext?.let { ctx ->
-                    val paths = listOfNotNull(file, File(file.parentFile, "thor-previous.log"), crashFile)
-                        .filter { it.exists() }.map { it.absolutePath }.toTypedArray()
-                    runCatching { android.media.MediaScannerConnection.scanFile(ctx, paths, null, null) }
-                }
-            }
         }
     }
 
     private fun pickDir(context: Context): File {
-        val shared = File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            "Thor-Tube-logs",
-        )
-        if (isWritable(shared)) return shared
-        val private = File(context.getExternalFilesDir(null) ?: context.filesDir, "logs")
-        private.mkdirs()
-        return private
+        // Earlier test builds wrote to the public Download folder; remove what's left there.
+        runCatching {
+            val old = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Thor-Tube-logs")
+            if (old.isDirectory) {
+                old.listFiles()?.forEach { it.delete() }
+                old.delete()
+            }
+        }
+        return File(context.filesDir, "logs").apply { mkdirs() }
     }
 
-    private fun isWritable(dir: File): Boolean = runCatching {
-        dir.mkdirs()
-        val probe = File(dir, ".probe")
-        probe.writeText("ok")
-        // A leftover thor.log we can't modify would also break things, so check it too.
-        val log = File(dir, "thor.log")
-        val ok = probe.delete() && (!log.exists() || log.canWrite())
-        ok
-    }.getOrDefault(false)
+    /** The log files that exist right now, newest first, for sharing. */
+    fun files(): List<File> = listOfNotNull(logFile, logFile?.parentFile?.let { File(it, "thor-previous.log") }, crashFile)
+        .filter { it.exists() && it.length() > 0 }
 
     private fun now() = synchronized(timeFormat) { timeFormat.format(Date()) }
 

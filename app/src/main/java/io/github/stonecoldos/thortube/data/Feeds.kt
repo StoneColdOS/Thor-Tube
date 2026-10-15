@@ -60,7 +60,7 @@ object Feeds {
         val handler = service.searchQHFactory
             .fromQuery(query, listOf(YoutubeSearchQueryHandlerFactory.VIDEOS), "")
         SearchInfo.getInfo(service, handler).relatedItems.videos()
-            .also { AppLog.i(TAG, "Search \"$query\": ${it.size} videos") }
+            .also { AppLog.i(TAG, "Search: ${it.size} videos") }
     }
 
     fun List<InfoItem>.videos(): List<Video> = filterIsInstance<StreamInfoItem>()

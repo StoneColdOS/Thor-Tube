@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the logs folder can be shared out of the app (Setup > Share logs). -->
+<paths>
+    <files-path name="logs" path="logs/" />
+</paths>

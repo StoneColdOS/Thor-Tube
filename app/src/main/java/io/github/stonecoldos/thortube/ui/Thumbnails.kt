@@ -73,7 +73,7 @@ object Thumbnails {
                 BitmapFactory.decodeStream(response.body!!.byteStream(), null, options)?.asImageBitmap()
             }
         }
-    }.onFailure { AppLog.d("ThorTube", "Thumbnail failed: $url ${it.message}") }.getOrNull()
+    }.onFailure { AppLog.d("ThorTube", "Thumbnail failed: ${it.javaClass.simpleName}") }.getOrNull()
 }
 
 /** A video's thumbnail. Fades in when it arrives; already-loaded ones show at once. */

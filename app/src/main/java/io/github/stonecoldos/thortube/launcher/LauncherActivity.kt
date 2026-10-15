@@ -43,7 +43,7 @@ class LauncherActivity : ComponentActivity() {
         val url = LinkParser.fromIntent(intent)
         val here = display?.displayId ?: Display.DEFAULT_DISPLAY
         val target = findBottomScreen()?.displayId
-        AppLog.i("ThorTube", "Launcher on display $here, bottom screen ${target ?: "not found"}, link ${url ?: "none"}")
+        AppLog.i("ThorTube", "Launcher on display $here, bottom screen ${target ?: "not found"}, link ${if (url != null) "yes" else "none"}")
 
         when {
             // Already on a secondary screen: play right here.

@@ -51,7 +51,7 @@ jobs:
             echo "Test build #${GITHUB_RUN_NUMBER} from ${GITHUB_SHA::7}: $(git log -1 --pretty=%s)"
             echo
             echo "Install Thor-Tube-latest.apk on the Thor. It updates over the previous test build (and installs next to CRT-Tube)."
-            echo "Logs are in Download/Thor-Tube-logs/thor.log."
+            echo "Logs: Setup > Share logs."
           } > notes.md
           gh release delete latest --cleanup-tag --yes 2>/dev/null || true
           gh release create latest Thor-Tube-latest.apk \

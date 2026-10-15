@@ -578,7 +578,9 @@ fun SetupScreen(app: MainActivity) {
         item {
             Section("About") {
                 Text("Thor-Tube ${BuildConfig.VERSION_NAME}. Unofficial; not made by YouTube or AYN.", color = p.dim, fontSize = 9.sp)
-                Text("Logs: Download/Thor-Tube-logs", color = p.dim, fontSize = 9.sp)
+                Spacer(Modifier.height(8.dp))
+                Pill("Share logs") { app.shareLogs() }
+                Text("Sends this app's logs (no video links, searches or account details) through Android's share menu.", color = p.dim, fontSize = 9.sp, modifier = Modifier.padding(top = 4.dp))
             }
         }
     }

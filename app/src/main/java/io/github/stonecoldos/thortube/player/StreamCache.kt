@@ -53,7 +53,7 @@ object StreamCache {
     suspend fun warm(url: String) {
         if (has(url)) return
         runCatching { load(url) }
-            .onSuccess { AppLog.d("ThorTube", "Ready ahead: ${it.name}") }
-            .onFailure { AppLog.d("ThorTube", "Couldn't get $url ready: ${it.message}") }
+            .onSuccess { AppLog.d("ThorTube", "Next video ready ahead") }
+            .onFailure { AppLog.d("ThorTube", "Couldn't get the next video ready: ${it.javaClass.simpleName}") }
     }
 }

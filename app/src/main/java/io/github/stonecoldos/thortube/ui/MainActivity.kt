@@ -46,6 +46,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import io.github.stonecoldos.thortube.AppLog
+import io.github.stonecoldos.thortube.BuildConfig
 import io.github.stonecoldos.thortube.ThorTubeApp
 import io.github.stonecoldos.thortube.data.Comment
 import io.github.stonecoldos.thortube.data.Comments
@@ -255,7 +256,6 @@ class MainActivity : ComponentActivity() {
                         Row(Modifier.fillMaxSize()) {
                             LaunchedEffect(signedIn) {
                                 me = if (signedIn) runCatching { YouTubeFeed.me() }.getOrNull() else null
-                                if (signedIn) AppLog.d(TAG, "Account: name=${me?.first?.isNotBlank()} photo=${me?.second}")
                             }
                             Rail(screen, signedIn, me, railFocus, onSwipe = { down -> moveScreen(down) }) { screen = it }
                             Crossfade(screen, Modifier.weight(1f).fillMaxSize(), animationSpec = tween(180), label = "screen") { s ->
@@ -430,7 +430,7 @@ class MainActivity : ComponentActivity() {
         }
         intent?.getStringExtra(EXTRA_CHANNEL)?.let {
             intent.removeExtra(EXTRA_CHANNEL)
-            AppLog.i(TAG, "Channel links aren't supported yet: $it")
+            AppLog.i(TAG, "Channel links aren't supported yet")
         }
     }
 
@@ -475,6 +475,20 @@ class MainActivity : ComponentActivity() {
     var toast by mutableStateOf<String?>(null)
         private set
     private var toastJob: Job? = null
+
+    /** Setup > Share logs: hand the private log files to Android's share sheet. */
+    fun shareLogs() {
+        val files = AppLog.files()
+        if (files.isEmpty()) return say("No logs yet")
+        val uris = ArrayList(files.map { androidx.core.content.FileProvider.getUriForFile(this, "$packageName.logs", it) })
+        val send = Intent(Intent.ACTION_SEND_MULTIPLE)
+            .setType("text/plain")
+            .putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+            .putExtra(Intent.EXTRA_SUBJECT, "Thor-Tube logs (${BuildConfig.VERSION_NAME})")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        runCatching { startActivity(Intent.createChooser(send, "Share Thor-Tube logs")) }
+            .onFailure { say("Couldn't open the share menu") }
+    }
 
     fun say(text: String) {
         toast = text
@@ -733,7 +747,7 @@ class MainActivity : ComponentActivity() {
             playAttempt(pendingStartMs.also { pendingStartMs = 0 })
             YouTubeHistory.start(video.url, durationSecs)
         } catch (e: Exception) {
-            AppLog.e(TAG, "Couldn't load ${video.url}", e)
+            AppLog.e(TAG, "Couldn't load a video", e)
             playerProblem = "Couldn't load this video.\n${e.message?.take(120).orEmpty()}"
         }
     }
@@ -897,7 +911,7 @@ class MainActivity : ComponentActivity() {
             playlistFeed = runCatching { YouTubeFeed.playlist(pl.browseId) }.fold(
                 { FeedState(it, at = System.currentTimeMillis()) },
                 {
-                    AppLog.w(TAG, "Playlist ${pl.browseId} failed", it)
+                    AppLog.w(TAG, "Playlist failed", it)
                     FeedState(error = "Couldn't load this playlist.")
                 },
             )
@@ -931,7 +945,7 @@ class MainActivity : ComponentActivity() {
             search = runCatching { Feeds.search(q) }.fold(
                 { FeedState(it, at = System.currentTimeMillis()) },
                 {
-                    AppLog.w(TAG, "Search failed for $q", it)
+                    AppLog.w(TAG, "Search failed", it)
                     FeedState(error = "Search failed. Check the connection.")
                 },
             )
@@ -955,7 +969,7 @@ class MainActivity : ComponentActivity() {
             comments = runCatching { Comments.first(url) }.fold(
                 { CommentsUi(it.items, it.next, count = it.count, disabled = it.disabled) },
                 {
-                    AppLog.w(TAG, "Comments failed for $url", it)
+                    AppLog.w(TAG, "Comments failed", it)
                     CommentsUi(error = "Couldn't load comments.")
                 },
             )

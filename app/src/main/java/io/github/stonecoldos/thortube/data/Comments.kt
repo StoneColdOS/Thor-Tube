@@ -46,7 +46,7 @@ object Comments {
             next = info.nextPage?.takeIf { Page.isValid(it) },
             count = info.commentsCount,
             disabled = info.isCommentsDisabled,
-        ).also { AppLog.d(TAG, "Comments: ${it.items.size} of ${it.count} for $videoUrl") }
+        ).also { AppLog.d(TAG, "Comments: ${it.items.size} of ${it.count}") }
     }
 
     /** The next page of comments, or of one comment's replies (pass its [Comment.replies]). */
