@@ -186,6 +186,7 @@ class MainActivity : ComponentActivity() {
                         Row(Modifier.fillMaxSize()) {
                             LaunchedEffect(signedIn) {
                                 me = if (signedIn) runCatching { YouTubeFeed.me() }.getOrNull() else null
+                                if (signedIn) AppLog.d(TAG, "Account: name=${me?.first?.isNotBlank()} photo=${me?.second}")
                             }
                             Rail(screen, signedIn, me) { screen = it }
                             Crossfade(screen, Modifier.weight(1f).fillMaxSize(), animationSpec = tween(180), label = "screen") { s ->
