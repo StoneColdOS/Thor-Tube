@@ -1022,12 +1022,11 @@ class MainActivity : ComponentActivity() {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val down = event.action == KeyEvent.ACTION_DOWN
-        if (down && event.repeatCount == 0) {
-            AppLog.d(
-                TAG,
-                "Input: key ${KeyEvent.keyCodeToString(event.keyCode)} src=0x${Integer.toHexString(event.source)} " +
-                    "display=${display?.displayId} windowFocus=${hasWindowFocus()} touchMode=${window.decorView.isInTouchMode} screen=$screen",
-            )
+        // Triggers: L2/R2 held = scrub mode in the player; a quick tap in the feed = jump a page.
+        if (event.keyCode == KeyEvent.KEYCODE_BUTTON_L2 || event.keyCode == KeyEvent.KEYCODE_BUTTON_R2) {
+            if (event.keyCode == KeyEvent.KEYCODE_BUTTON_L2) l2Key = true else r2Key = true
+            if (event.repeatCount == 0) triggerChanged(event.keyCode == KeyEvent.KEYCODE_BUTTON_L2, down)
+            return true
         }
         val arrow = event.keyCode == KeyEvent.KEYCODE_DPAD_UP || event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
             event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
@@ -1091,16 +1090,27 @@ class MainActivity : ComponentActivity() {
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
         val pad = event.isFromSource(InputDevice.SOURCE_JOYSTICK) || event.isFromSource(InputDevice.SOURCE_GAMEPAD)
         if (!pad || event.action != MotionEvent.ACTION_MOVE) return super.dispatchGenericMotionEvent(event)
-        val x = direction(event.getAxisValue(MotionEvent.AXIS_HAT_X), event.getAxisValue(MotionEvent.AXIS_X))
-        val y = direction(event.getAxisValue(MotionEvent.AXIS_HAT_Y), event.getAxisValue(MotionEvent.AXIS_Y))
-        if ((x != heldX || y != heldY) && (x != 0 || y != 0)) {
-            AppLog.d(
-                TAG,
-                "Input: stick/hat x=$x y=$y (hat ${event.getAxisValue(MotionEvent.AXIS_HAT_X)},${event.getAxisValue(MotionEvent.AXIS_HAT_Y)} " +
-                    "stick ${"%.2f".format(event.getAxisValue(MotionEvent.AXIS_X))},${"%.2f".format(event.getAxisValue(MotionEvent.AXIS_Y))}) " +
-                    "from ${event.device?.name} display=${display?.displayId} windowFocus=${hasWindowFocus()}",
-            )
+        logPadOnce(event)
+        // Analog triggers (some pads send these instead of, or as well as, L2/R2 key presses).
+        val lt = maxOf(event.getAxisValue(MotionEvent.AXIS_LTRIGGER), event.getAxisValue(MotionEvent.AXIS_BRAKE))
+        val rt = maxOf(event.getAxisValue(MotionEvent.AXIS_RTRIGGER), event.getAxisValue(MotionEvent.AXIS_GAS))
+        if (!l2Key) { if (lt > 0.5f && !l2) triggerChanged(true, true) else if (lt < 0.3f && l2) triggerChanged(true, false) }
+        if (!r2Key) { if (rt > 0.5f && !r2) triggerChanged(false, true) else if (rt < 0.3f && r2) triggerChanged(false, false) }
+        val leftX = event.getAxisValue(MotionEvent.AXIS_X)
+        val rightX = event.getAxisValue(MotionEvent.AXIS_Z)
+        rightY = deadzone(event.getAxisValue(MotionEvent.AXIS_RZ), 0.2f)
+
+        if ((l2 || r2) && inPlayer()) {
+            // Scrub mode: either stick, left/right, sets the speed. The arrows stay quiet meanwhile.
+            scrubStick = deadzone(if (kotlin.math.abs(leftX) >= kotlin.math.abs(rightX)) leftX else rightX, 0.15f)
+            if (scrubStick != 0f) startScrub()
+            heldX = 0; heldY = 0; repeatJob?.cancel()
+            return true
         }
+        if (rightY != 0f) startWheel()
+
+        val x = direction(event.getAxisValue(MotionEvent.AXIS_HAT_X), leftX)
+        val y = direction(event.getAxisValue(MotionEvent.AXIS_HAT_Y), event.getAxisValue(MotionEvent.AXIS_Y))
         if (x != heldX || y != heldY) {
             heldX = x
             heldY = y
@@ -1124,6 +1134,103 @@ class MainActivity : ComponentActivity() {
             }
         }
         return true
+    }
+
+    // ---------------------------------------------------------------- triggers, scrubbing, right-stick scrolling
+
+    /** Where the seek bar points while you scrub (null = not scrubbing). Letting go of the trigger jumps there. */
+    var scrubMs by mutableStateOf<Long?>(null)
+        private set
+    private var l2 = false
+    private var r2 = false
+    private var l2Key = false   // trigger seen as a key press, so ignore its analog axis
+    private var r2Key = false
+    private var triggerDownAt = 0L
+    private var scrubStick = 0f
+    private var rightY = 0f
+    private var scrubJob: Job? = null
+    private var wheelJob: Job? = null
+    private var loggedPad = false
+
+    private fun inPlayer() = nowPlaying != null && !minimized && !commentsPageOpen
+
+    private fun deadzone(v: Float, dz: Float) = if (kotlin.math.abs(v) < dz) 0f else v
+
+    private fun logPadOnce(e: MotionEvent) {
+        if (loggedPad) return
+        loggedPad = true
+        val axes = e.device?.motionRanges?.joinToString { MotionEvent.axisToString(it.axis) }
+        AppLog.d(TAG, "Controller: ${e.device?.name} axes=[$axes]")
+    }
+
+    private fun triggerChanged(left: Boolean, held: Boolean) {
+        val was = l2 || r2
+        if (left) l2 = held else r2 = held
+        val now = l2 || r2
+        if (!was && now) triggerDownAt = SystemClock.uptimeMillis()
+        if (was && !now) {
+            if (scrubMs != null) finishScrub()
+            else if (SystemClock.uptimeMillis() - triggerDownAt < 450 && !inPlayer()) pageJump(down = !left)
+        }
+    }
+
+    private fun startScrub() {
+        if (scrubJob?.isActive == true) return
+        scrubMs = player.currentPosition
+        controlsPing++
+        scrubJob = lifecycleScope.launch {
+            var last = SystemClock.uptimeMillis()
+            var lastPing = last
+            while (isActive && (l2 || r2)) {
+                delay(16)
+                val now = SystemClock.uptimeMillis()
+                val dt = (now - last) / 1000f
+                last = now
+                // Gentle push creeps, full push flies. Long videos fly faster.
+                val dur = durationMs.coerceAtLeast(1)
+                val fullSpeed = maxOf(60_000f, dur / 12f)   // ms of video per second at full tilt
+                val rate = scrubStick * kotlin.math.abs(scrubStick) * fullSpeed
+                scrubMs = ((scrubMs ?: 0L) + (rate * dt).toLong()).coerceIn(0L, dur)
+                if (now - lastPing > 800) { controlsPing++; lastPing = now }
+            }
+        }
+    }
+
+    private fun finishScrub() {
+        scrubJob?.cancel()
+        scrubJob = null
+        scrubMs?.let { seekTo(it) }
+        scrubMs = null
+        scrubStick = 0f
+    }
+
+    /** Tap L2/R2 while browsing: move the highlight about a page up or down. */
+    private fun pageJump(down: Boolean) {
+        leaveTouchMode()
+        repeat(3) { arrow(if (down) KeyEvent.KEYCODE_DPAD_DOWN else KeyEvent.KEYCODE_DPAD_UP) }
+    }
+
+    /** Right stick up/down: smooth scrolling, sent as mouse-wheel turns to whatever list is in the middle of the screen. */
+    private fun startWheel() {
+        if (wheelJob?.isActive == true) return
+        wheelJob = lifecycleScope.launch {
+            while (isActive && rightY != 0f) {
+                val root = window.decorView
+                val x = root.width * 0.62f
+                val y = root.height * (if (inPlayer()) 0.78f else 0.55f)
+                val props = arrayOf(MotionEvent.PointerProperties().apply { id = 0; toolType = MotionEvent.TOOL_TYPE_MOUSE })
+                val coords = arrayOf(MotionEvent.PointerCoords().apply {
+                    this.x = x
+                    this.y = y
+                    setAxisValue(MotionEvent.AXIS_VSCROLL, -rightY * kotlin.math.abs(rightY) * 0.9f)
+                })
+                val t = SystemClock.uptimeMillis()
+                val ev = MotionEvent.obtain(t, t, MotionEvent.ACTION_SCROLL, 1, props, coords, 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0)
+                root.dispatchGenericMotionEvent(ev)
+                ev.recycle()
+                delay(45)
+            }
+        }
     }
 
     private fun arrow(code: Int) {

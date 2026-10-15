@@ -159,7 +159,7 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
     }
     LaunchedEffect(lastPoke, app.isPlaying) {
         delay(3_000)
-        if (app.isPlaying && !app.optionsOpen) controls = false
+        if (app.isPlaying && !app.optionsOpen && app.scrubMs == null) controls = false
     }
     var skip by remember { mutableStateOf<Pair<Int, Int>?>(null) }   // side (-1 back, 1 ahead) to seconds
     LaunchedEffect(skip) {
@@ -244,6 +244,19 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
         ) {
             VideoSurface(app, Modifier.fillMaxSize())
             SkipBadge(skip, Modifier.fillMaxSize())
+            app.scrubMs?.let { ms ->
+                Text(
+                    "${formatDuration(ms / 1000).ifEmpty { "0:00" }}  /  ${formatDuration(app.durationMs / 1000)}",
+                    color = Color.White,
+                    fontSize = if (app.fullscreen) 22.sp else 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 12.dp)
+                        .background(Color(0xB0000000), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 5.dp),
+                )
+            }
             if (!app.firstFrame && app.crtMode == CrtMode.OFF) Thumb(np.video.bigThumbnail, Modifier.fillMaxSize())
             app.playerProblem?.let {
                 Text(
@@ -458,15 +471,16 @@ private fun PlayerControls(app: MainActivity) {
             RoundButton(if (app.fullscreen) "⤡" else "⛶") { app.toggleFullscreen() }
         }
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 10.dp)) {
+            val shownMs = app.scrubMs ?: app.positionMs
             Text(
-                "${formatDuration(app.positionMs / 1000).ifEmpty { "0:00" }} / ${formatDuration(app.durationMs / 1000).ifEmpty { "--:--" }}",
+                "${formatDuration(shownMs / 1000).ifEmpty { "0:00" }} / ${formatDuration(app.durationMs / 1000).ifEmpty { "--:--" }}",
                 color = Color.White,
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
             )
             val dur = app.durationMs.coerceAtLeast(1)
             Slider(
-                value = (app.positionMs.toFloat() / dur).coerceIn(0f, 1f),
+                value = (shownMs.toFloat() / dur).coerceIn(0f, 1f),
                 onValueChange = { app.seekTo((it * dur).toLong()) },
                 colors = SliderDefaults.colors(thumbColor = p.accent, activeTrackColor = p.accent, inactiveTrackColor = Color(0x80FFFFFF)),
                 modifier = Modifier.height(22.dp),
