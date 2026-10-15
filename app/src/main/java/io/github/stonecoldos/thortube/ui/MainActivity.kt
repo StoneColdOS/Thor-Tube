@@ -244,7 +244,7 @@ class MainActivity : ComponentActivity() {
             val palette = paletteFor(theme, isSystemInDarkTheme())
             CompositionLocalProvider(LocalPalette provides palette) {
                 Box(Modifier.fillMaxSize().background(Color.Black)) {
-                Box(Modifier.fillMaxSize().crtPower(power.value).background(palette.bg).onFocusChanged { appHasFocus = it.hasFocus }) {
+                Box(Modifier.fillMaxSize().crtPower(power.value).background(palette.bg)) {
                     // The player slides up over everything. Once it fully covers the screen, the screens
                     // underneath step aside so the controller can't wander behind it; they come back
                     // (scrolled to where you were) the moment it starts sliding away.
@@ -1012,8 +1012,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Whether anything inside the app holds the controller highlight right now. */
-    private var appHasFocus = false
     /** The sidebar button for the current screen; the highlight lands here if it's nowhere. */
     val railFocus = androidx.compose.ui.focus.FocusRequester()
 
@@ -1028,19 +1026,15 @@ class MainActivity : ComponentActivity() {
             AppLog.d(
                 TAG,
                 "Input: key ${KeyEvent.keyCodeToString(event.keyCode)} src=0x${Integer.toHexString(event.source)} " +
-                    "display=${display?.displayId} windowFocus=${hasWindowFocus()} highlight=$appHasFocus screen=$screen",
+                    "display=${display?.displayId} windowFocus=${hasWindowFocus()} touchMode=${window.decorView.isInTouchMode} screen=$screen",
             )
         }
-        // Arrow keys with nothing highlighted would go nowhere: put the highlight on the sidebar first.
         val arrow = event.keyCode == KeyEvent.KEYCODE_DPAD_UP || event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
-            event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
-        if (arrow && !appHasFocus && nowPlaying.let { it == null || minimized }) {
-            if (down) {
-                val ok = runCatching { railFocus.requestFocus() }.isSuccess
-                AppLog.d(TAG, "Input: nothing highlighted, moved highlight to the sidebar (ok=$ok)")
-            }
-            return true
-        }
+            event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
+            event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == KeyEvent.KEYCODE_BUTTON_A
+        // After any touch, Android is in "touch mode" and buttons refuse the controller highlight.
+        // A real key press would end touch mode, but our D-pad arrives as joystick motion, so end it ourselves.
+        if (down && arrow) leaveTouchMode()
         when (event.keyCode) {
             // A presses whatever's highlighted.
             KeyEvent.KEYCODE_BUTTON_A -> return super.dispatchKeyEvent(remap(event, KeyEvent.KEYCODE_DPAD_CENTER))
@@ -1068,7 +1062,22 @@ class MainActivity : ComponentActivity() {
                 return true
             }
         }
-        return super.dispatchKeyEvent(event)
+        val handled = super.dispatchKeyEvent(event)
+        // Nothing took the arrow (nothing highlighted yet): start the highlight on the sidebar.
+        if (!handled && down && arrow && event.keyCode != KeyEvent.KEYCODE_BUTTON_A && event.keyCode != KeyEvent.KEYCODE_DPAD_CENTER) {
+            val ok = runCatching { railFocus.requestFocus() }.isSuccess
+            AppLog.d(TAG, "Input: arrow went nowhere, highlight to the sidebar (ok=$ok)")
+            return true
+        }
+        return handled
+    }
+
+    private fun leaveTouchMode() {
+        if (!window.decorView.isInTouchMode) return
+        val content = findViewById<android.view.ViewGroup>(android.R.id.content)
+        val compose = content?.getChildAt(0) ?: return
+        compose.requestFocusFromTouch()
+        AppLog.d(TAG, "Input: left touch mode (now ${window.decorView.isInTouchMode})")
     }
 
     private fun remap(e: KeyEvent, code: Int) =
