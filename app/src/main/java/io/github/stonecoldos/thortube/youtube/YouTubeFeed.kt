@@ -53,7 +53,19 @@ object YouTubeFeed {
             }
         }
         walk(r)
-        val me = items.firstOrNull { it.optBoolean("isSelected") } ?: items.firstOrNull() ?: return null
+        items.forEach {
+            io.github.stonecoldos.thortube.AppLog.d(
+                "ThorTube",
+                "Account option: keys=${it.keys().asSequence().toList()} selected=${it.optBoolean("isSelected")} " +
+                    "hasChannel=${it.optBoolean("hasChannel")} photo=${it.optJSONObject("accountPhoto") != null}",
+            )
+        }
+        fun isChannel(o: JSONObject) = o.optBoolean("hasChannel") || o.has("channelHandle") ||
+            o.optJSONObject("accountByline")?.toString()?.contains("@") == true
+        val me = items.firstOrNull { it.optBoolean("isSelected") && isChannel(it) }
+            ?: items.firstOrNull { isChannel(it) }
+            ?: items.firstOrNull { it.optBoolean("isSelected") }
+            ?: items.firstOrNull() ?: return null
         val name = me.optJSONObject("accountName")?.let { n ->
             n.optString("simpleText").ifBlank {
                 n.optJSONArray("runs")?.let { runs -> (0 until runs.length()).joinToString("") { runs.getJSONObject(it).optString("text") } }.orEmpty()

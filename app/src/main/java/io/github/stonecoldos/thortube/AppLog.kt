@@ -29,8 +29,11 @@ object AppLog {
     private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
     @Volatile private var logFile: File? = null
     @Volatile private var crashFile: File? = null
+    @Volatile private var appContext: Context? = null
+    @Volatile private var lastScan = 0L
 
     fun init(context: Context) {
+        appContext = context.applicationContext
         val dir = pickDir(context)
         val current = File(dir, "thor.log")
         val previous = File(dir, "thor-previous.log")
@@ -54,6 +57,7 @@ object AppLog {
             val trace = stackTrace(error)
             runCatching {
                 crashFile?.writeText("Crash in ${thread.name} at ${Date()}\n${pm.versionName}\n$trace")
+                crashFile?.let { android.media.MediaScannerConnection.scanFile(context, arrayOf(it.absolutePath), null, null) }
                 logFile?.appendText("${now()} CRASH ${thread.name}\n$trace")
             }
             previousHandler?.uncaughtException(thread, error)
@@ -77,6 +81,17 @@ object AppLog {
         val file = logFile ?: return
         writer.execute {
             runCatching { FileWriter(file, true).use { it.write(text) } }
+            // Files written straight to Download don't show in the Files app until Android's
+            // media index hears about them, so nudge it now and then.
+            val now = System.currentTimeMillis()
+            if (now - lastScan > 5_000) {
+                lastScan = now
+                appContext?.let { ctx ->
+                    val paths = listOfNotNull(file, File(file.parentFile, "thor-previous.log"), crashFile)
+                        .filter { it.exists() }.map { it.absolutePath }.toTypedArray()
+                    runCatching { android.media.MediaScannerConnection.scanFile(ctx, paths, null, null) }
+                }
+            }
         }
     }
 
