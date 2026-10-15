@@ -82,6 +82,16 @@ class Settings(context: Context) {
     var crt: CrtMode
         get() = runCatching { CrtMode.valueOf(prefs.getString("crt", null) ?: "") }.getOrDefault(CrtMode.OFF)
         set(value) = prefs.edit().putString("crt", value.name).apply()
+
+    /** Tallest picture wanted, in pixels. 0 = Auto. */
+    var quality: Int
+        get() = prefs.getInt("quality", 0)
+        set(value) = prefs.edit().putInt("quality", value).apply()
+
+    /** Caption language last picked, or null for captions off. */
+    var captionLang: String?
+        get() = prefs.getString("captionLang", null)
+        set(value) = prefs.edit().putString("captionLang", value).apply()
 }
 
 /** Which shader settings a tube style uses. OFF never reaches the renderer. */

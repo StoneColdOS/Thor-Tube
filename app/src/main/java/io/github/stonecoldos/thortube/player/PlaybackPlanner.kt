@@ -27,10 +27,21 @@ sealed interface PlaybackAttempt {
 
 object PlaybackPlanner {
 
-    /** Plenty for a ~4 inch screen, and keeps channel changes fast. */
-    private const val MAX_HEIGHT = 720
+    /** "Auto": plenty for the Thor's screen, and starts fast. */
+    const val AUTO_HEIGHT = 720
+    /** The bottom screen is 1080 px tall, so anything above that is wasted bandwidth. */
+    private const val TOP_HEIGHT = 1080
 
-    fun plan(info: StreamInfo): List<PlaybackAttempt> {
+    /** The picture sizes this video offers that the Thor can use, biggest first. */
+    fun heights(info: StreamInfo): List<Int> = info.videoOnlyStreams
+        .filter { it.isPlayableUrl() && it.height in 1..TOP_HEIGHT }
+        .map { it.height }
+        .distinct()
+        .sortedDescending()
+
+    /** [maxHeight] = the tallest picture wanted (0 = Auto). */
+    fun plan(info: StreamInfo, maxHeight: Int = 0): List<PlaybackAttempt> {
+        val cap = if (maxHeight <= 0) AUTO_HEIGHT else maxHeight.coerceAtMost(TOP_HEIGHT)
         val attempts = mutableListOf<PlaybackAttempt>()
 
         val hls = info.hlsUrl?.takeIf { it.isNotBlank() }?.let { PlaybackAttempt.Hls(it) }
@@ -39,7 +50,9 @@ object PlaybackPlanner {
         if (isLive && hls != null) attempts += hls
 
         val video = info.videoOnlyStreams
-            .filter { it.isPlayableUrl() && it.height in 1..MAX_HEIGHT }
+            .filter { it.isPlayableUrl() && it.height in 1..cap }
+            .ifEmpty { info.videoOnlyStreams.filter { it.isPlayableUrl() && it.height > 0 } }
+            .let { list -> if (list.any { it.height <= cap }) list.filter { it.height <= cap } else listOfNotNull(list.minByOrNull { it.height }) }
             .maxWithOrNull(
                 compareBy<VideoStream> { it.height }
                     // Same height: AVC is the safest bet for hardware decoding
@@ -58,7 +71,7 @@ object PlaybackPlanner {
 
         info.videoStreams
             .filter { it.isPlayableUrl() }
-            .maxByOrNull { it.height }
+            .let { list -> list.filter { it.height <= cap }.maxByOrNull { it.height } ?: list.minByOrNull { it.height } }
             ?.let { attempts += PlaybackAttempt.Muxed(it) }
 
         if (!isLive && hls != null) attempts += hls

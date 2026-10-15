@@ -54,6 +54,9 @@ import io.github.stonecoldos.thortube.data.ago
 import io.github.stonecoldos.thortube.player.MediaSources
 import io.github.stonecoldos.thortube.player.PlaybackAttempt
 import io.github.stonecoldos.thortube.player.PlaybackPlanner
+import io.github.stonecoldos.thortube.data.CaptionTrack
+import io.github.stonecoldos.thortube.data.Captions
+import io.github.stonecoldos.thortube.data.Cue
 import io.github.stonecoldos.thortube.player.StreamCache
 import io.github.stonecoldos.thortube.youtube.YouTubeAccount
 import io.github.stonecoldos.thortube.youtube.YouTubeActions
@@ -160,6 +163,66 @@ class MainActivity : ComponentActivity() {
     var returnTo by mutableStateOf<String?>(null)
 
     private var attempts: List<PlaybackAttempt> = emptyList()
+    private var currentInfo: org.schabi.newpipe.extractor.stream.StreamInfo? = null
+
+    // ---- player options: quality, speed, captions
+    var optionsOpen by mutableStateOf(false)
+    /** Tallest picture wanted (0 = Auto); remembered between videos and launches. */
+    var quality by mutableStateOf(0)
+        private set
+    /** Picture sizes the current video offers, biggest first. */
+    var qualities by mutableStateOf<List<Int>>(emptyList())
+        private set
+    /** Height actually playing right now (0 = unknown). */
+    var playingHeight by mutableStateOf(0)
+        private set
+    var speed by mutableStateOf(1f)
+        private set
+    var captionTracks by mutableStateOf<List<CaptionTrack>>(emptyList())
+        private set
+    var caption by mutableStateOf<CaptionTrack?>(null)
+        private set
+    var captionText by mutableStateOf("")
+        private set
+    private var cues: List<Cue> = emptyList()
+    private var captionJob: Job? = null
+
+    fun setQuality(height: Int) {
+        quality = height
+        settings.quality = height
+        val info = currentInfo ?: return
+        val wasPlaying = player.playWhenReady
+        val at = player.currentPosition
+        attempts = PlaybackPlanner.plan(info, height)
+        attemptIndex = 0
+        if (attempts.isNotEmpty()) {
+            playAttempt(at)
+            player.playWhenReady = wasPlaying
+        }
+    }
+
+    fun setSpeed(value: Float) {
+        speed = value
+        player.setPlaybackSpeed(value)
+    }
+
+    /** null turns captions off. The choice sticks for later videos. */
+    fun setCaption(track: CaptionTrack?) {
+        settings.captionLang = track?.lang
+        useCaption(track)
+    }
+
+    private fun useCaption(track: CaptionTrack?) {
+        captionJob?.cancel()
+        caption = track
+        cues = emptyList()
+        captionText = ""
+        if (track == null) return
+        captionJob = lifecycleScope.launch {
+            cues = Captions.load(track)
+            if (cues.isEmpty() && caption == track) say("Couldn't load captions")
+        }
+    }
     private var attemptIndex = 0
     private var playJob: Job? = null
     private var tickJob: Job? = null
@@ -171,6 +234,7 @@ class MainActivity : ComponentActivity() {
         settings = Settings(this)
         theme = settings.theme
         crtMode = settings.crt
+        quality = settings.quality
         sources = MediaSources(ThorTubeApp.http)
         player = ExoPlayer.Builder(this).build().apply { addListener(listener) }
 
@@ -484,6 +548,11 @@ class MainActivity : ComponentActivity() {
         firstFrame = false
         crtViews.forEach { it.targetStatic = 1f }   // a burst of snow until the new picture arrives
         playerProblem = null
+        optionsOpen = false
+        currentInfo = null
+        qualities = emptyList()
+        captionTracks = emptyList()
+        useCaption(null)
         positionMs = 0
         durationMs = video.durationSecs * 1000
         playJob?.cancel()
@@ -540,7 +609,11 @@ class MainActivity : ComponentActivity() {
             )
             if (nowPlaying != null) lastPlaying = nowPlaying
             loadVideoState(video, info.uploaderUrl)
-            attempts = PlaybackPlanner.plan(info)
+            currentInfo = info
+            qualities = PlaybackPlanner.heights(info)
+            captionTracks = Captions.tracks(info)
+            useCaption(settings.captionLang?.let { Captions.pick(captionTracks, it) })
+            attempts = PlaybackPlanner.plan(info, quality)
             attemptIndex = 0
             if (attempts.isEmpty()) {
                 playerProblem = "This video can't be played here."
@@ -557,6 +630,11 @@ class MainActivity : ComponentActivity() {
     private fun playAttempt(startMs: Long) {
         val attempt = attempts[attemptIndex]
         AppLog.i(TAG, "Playing via ${attempt.label} (${attemptIndex + 1}/${attempts.size}) from ${startMs}ms")
+        playingHeight = when (attempt) {
+            is PlaybackAttempt.Split -> attempt.video.height
+            is PlaybackAttempt.Muxed -> attempt.stream.height
+            is PlaybackAttempt.Hls -> 0
+        }
         player.setMediaSource(sources.build(attempt, durationSecs), startMs)
         player.prepare()
         player.playWhenReady = true
@@ -568,13 +646,14 @@ class MainActivity : ComponentActivity() {
             var lastHistory = 0L
             while (isActive) {
                 positionMs = player.currentPosition.coerceAtLeast(0)
+                if (cues.isNotEmpty()) captionText = Captions.at(cues, positionMs)
                 player.duration.takeIf { it > 0 }?.let { durationMs = it }
                 val now = SystemClock.uptimeMillis()
                 if (now - lastHistory > 5_000) {
                     lastHistory = now
                     nowPlaying?.let { YouTubeHistory.tick(it.video.url, player.currentPosition / 1000f, player.isPlaying) }
                 }
-                delay(250)
+                delay(if (cues.isNotEmpty()) 100 else 250)
             }
         }
     }

@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.expandVertically
@@ -33,6 +34,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -70,6 +72,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.stonecoldos.thortube.data.Captions
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -139,7 +142,13 @@ private fun PlainSurface(app: MainActivity, modifier: Modifier) {
 fun PlayerScreen(app: MainActivity, np: NowPlaying) {
     val p = LocalPalette.current
     // Back leaves full screen first, then shrinks the video into the corner instead of stopping it.
-    BackHandler { if (app.fullscreen) app.fullscreen = false else app.minimize() }
+    BackHandler {
+        when {
+            app.optionsOpen -> app.optionsOpen = false
+            app.fullscreen -> app.fullscreen = false
+            else -> app.minimize()
+        }
+    }
     var controls by remember { mutableStateOf(true) }
     var lastPoke by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(app.controlsPing) {
@@ -148,7 +157,7 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
     }
     LaunchedEffect(lastPoke, app.isPlaying) {
         delay(3_000)
-        if (app.isPlaying) controls = false
+        if (app.isPlaying && !app.optionsOpen) controls = false
     }
     val videoFocus = remember { FocusRequester() }
     LaunchedEffect(np.video.url) { runCatching { videoFocus.requestFocus() } }
@@ -172,6 +181,7 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
                 .focusRequester(videoFocus)
                 .onKeyEvent { e ->
                     if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
+                    if (app.optionsOpen) return@onKeyEvent false   // let the controller move around the options
                     when (e.key) {
                         Key.DirectionLeft -> { app.seekBy(-10_000); true }
                         Key.DirectionRight -> { app.seekBy(10_000); true }
@@ -209,10 +219,32 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
                     modifier = Modifier.align(Alignment.Center).background(Color(0xC0000000), RoundedCornerShape(8.dp)).padding(10.dp),
                 )
             }
+            // Captions sit above the bottom edge, and lift clear of the seek bar when controls show.
+            if (app.captionText.isNotEmpty()) {
+                val lift by animateDpAsState(if (controls) 44.dp else 10.dp, tween(200), label = "captionLift")
+                Text(
+                    app.captionText,
+                    color = Color.White,
+                    fontSize = if (app.fullscreen) 15.sp else 11.sp,
+                    lineHeight = if (app.fullscreen) 19.sp else 14.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = lift, start = 24.dp, end = 24.dp)
+                        .background(Color(0xB0000000), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
             val controlsAlpha by animateFloatAsState(if (controls) 1f else 0f, tween(if (controls) 180 else 260), label = "controls")
             if (controlsAlpha > 0f) {
                 Box(Modifier.fillMaxSize().graphicsLayer { alpha = controlsAlpha }) { PlayerControls(app) }
             }
+            androidx.compose.animation.AnimatedVisibility(
+                app.optionsOpen,
+                enter = fadeIn(tween(150)),
+                exit = fadeOut(tween(150)),
+                modifier = Modifier.fillMaxSize(),
+            ) { PlayerOptions(app) }
         }
 
         if (!app.fullscreen) PlayerDetails(app, np, showInfo, activeList)
@@ -356,7 +388,17 @@ private fun PlayerControls(app: MainActivity) {
             RoundButton("+10") { app.seekBy(10_000) }
         }
         RoundButton("⌄", modifier = Modifier.align(Alignment.TopStart).padding(8.dp)) { app.minimize() }
-        RoundButton(if (app.fullscreen) "⤡" else "⛶", modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) { app.toggleFullscreen() }
+        Row(Modifier.align(Alignment.TopEnd).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (app.captionTracks.isNotEmpty()) {
+                RoundButton("CC", lit = app.caption != null) {
+                    // Quick toggle: off, or back to the last language (or the best match for this device).
+                    if (app.caption != null) app.setCaption(null)
+                    else app.setCaption(Captions.pick(app.captionTracks, java.util.Locale.getDefault().language) ?: app.captionTracks.first())
+                }
+            }
+            RoundButton("⚙") { app.optionsOpen = true }
+            RoundButton(if (app.fullscreen) "⤡" else "⛶") { app.toggleFullscreen() }
+        }
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 10.dp)) {
             Text(
                 "${formatDuration(app.positionMs / 1000).ifEmpty { "0:00" }} / ${formatDuration(app.durationMs / 1000).ifEmpty { "--:--" }}",
@@ -376,19 +418,65 @@ private fun PlayerControls(app: MainActivity) {
 }
 
 @Composable
-private fun RoundButton(label: String, big: Boolean = false, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun RoundButton(label: String, big: Boolean = false, lit: Boolean = false, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val s = if (big) 44.dp else 34.dp
     Box(
         modifier
             .size(s)
             .clip(CircleShape)
-            .background(Color(0x99000000))
+            .background(if (lit) LocalPalette.current.accent.copy(alpha = 0.85f) else Color(0x99000000))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(label, color = Color.White, fontSize = if (big) 15.sp else 10.sp, fontWeight = FontWeight.Bold)
     }
 }
+
+/** Quality, speed and captions, laid over the video. */
+@Composable
+private fun PlayerOptions(app: MainActivity) {
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xD0000000))
+            .clickable(indication = null, interactionSource = null) { app.optionsOpen = false },
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .align(Alignment.Center)
+                .padding(horizontal = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(if (app.fullscreen) 14.dp else 6.dp),
+        ) {
+            val autoLabel = if (app.quality == 0 && app.playingHeight > 0) "Auto (${app.playingHeight}p)" else "Auto"
+            OptionRow("Quality") {
+                item { Box(Modifier.focusRequester(first)) { Chip(autoLabel, app.quality == 0) { app.setQuality(0) } } }
+                items(app.qualities) { h -> Chip("${h}p", app.quality == h) { app.setQuality(h) } }
+            }
+            OptionRow("Speed") {
+                items(SPEEDS) { v -> Chip(if (v == 1f) "Normal" else "${v}x".replace(".0x", "x"), app.speed == v) { app.setSpeed(v) } }
+            }
+            OptionRow("Captions") {
+                item { Chip("Off", app.caption == null) { app.setCaption(null) } }
+                if (app.captionTracks.isEmpty()) item { Text("None for this video", color = Color(0xB0FFFFFF), fontSize = 10.sp, modifier = Modifier.padding(6.dp)) }
+                items(app.captionTracks) { t -> Chip(t.label, app.caption == t) { app.setCaption(t) } }
+            }
+        }
+        RoundButton("✕", modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) { app.optionsOpen = false }
+    }
+}
+
+@Composable
+private fun OptionRow(title: String, content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {
+    Column {
+        Text(title, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 2.dp, bottom = 3.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), content = content)
+    }
+}
+
+private val SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
 
 // ------------------------------------------------------------------ comments
 
