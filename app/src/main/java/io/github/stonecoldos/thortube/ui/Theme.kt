@@ -63,6 +63,13 @@ fun paletteFor(mode: ThemeMode, systemDark: Boolean): Palette = when (mode) {
 
 val LocalPalette = staticCompositionLocalOf { DarkPalette }
 
+/** The retro picture effect on videos. */
+enum class CrtMode(val label: String, val blurb: String) {
+    OFF("Off", "Plain, sharp video."),
+    NINETIES("90s tube", "A curved tube with heavy scanlines and glowing phosphor stripes."),
+    NOUGHTIES("2000s flat", "A flat late-2000s HD tube: faint lines, punchier picture."),
+}
+
 /** Saved choices. */
 class Settings(context: Context) {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -70,4 +77,8 @@ class Settings(context: Context) {
     var theme: ThemeMode
         get() = runCatching { ThemeMode.valueOf(prefs.getString("theme", null) ?: "") }.getOrDefault(ThemeMode.DARK)
         set(value) = prefs.edit().putString("theme", value.name).apply()
+
+    var crt: CrtMode
+        get() = runCatching { CrtMode.valueOf(prefs.getString("crt", null) ?: "") }.getOrDefault(CrtMode.OFF)
+        set(value) = prefs.edit().putString("crt", value.name).apply()
 }

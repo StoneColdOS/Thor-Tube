@@ -42,6 +42,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -73,6 +74,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import android.opengl.GLSurfaceView
+import io.github.stonecoldos.thortube.crt.CrtRenderer
 import io.github.stonecoldos.thortube.data.Comment
 import io.github.stonecoldos.thortube.data.formatDuration
 import kotlinx.coroutines.delay
@@ -80,6 +83,41 @@ import kotlinx.coroutines.delay
 /** The picture. Each place that shows the video (full player, mini-player) gets its own view. */
 @Composable
 private fun VideoSurface(app: MainActivity, modifier: Modifier) {
+    // Switching the CRT effect swaps in a different kind of view.
+    key(app.crtMode == CrtMode.OFF) {
+        if (app.crtMode == CrtMode.OFF) PlainSurface(app, modifier) else TubeSurface(app, modifier)
+    }
+}
+
+/** The video through the CRT shader (CRT effect on). */
+@Composable
+private fun TubeSurface(app: MainActivity, modifier: Modifier) {
+    AndroidView(
+        factory = { ctx ->
+            GLSurfaceView(ctx).apply {
+                setEGLContextClientVersion(2)
+                preserveEGLContextOnPause = true
+                lateinit var r: CrtRenderer
+                r = CrtRenderer(this) { surface -> app.crtSurfaceReady(r, surface) }
+                setRenderer(r)
+                renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+                tag = r
+                app.crtAttached(r)
+            }
+        },
+        update = { (it.tag as CrtRenderer).applyLook(flat = app.crtMode == CrtMode.NOUGHTIES) },
+        onRelease = { gl ->
+            val r = gl.tag as CrtRenderer
+            app.crtDetached(r)
+            r.release()
+        },
+        modifier = modifier,
+    )
+}
+
+/** The plain video (CRT effect off). */
+@Composable
+private fun PlainSurface(app: MainActivity, modifier: Modifier) {
     AndroidView(
         factory = { ctx ->
             PlayerView(ctx).apply {
@@ -162,7 +200,7 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
                 },
         ) {
             VideoSurface(app, Modifier.fillMaxSize())
-            if (!app.firstFrame) Thumb(np.video.bigThumbnail, Modifier.fillMaxSize())
+            if (!app.firstFrame && app.crtMode == CrtMode.OFF) Thumb(np.video.bigThumbnail, Modifier.fillMaxSize())
             app.playerProblem?.let {
                 Text(
                     it,
@@ -196,6 +234,13 @@ private fun androidx.compose.foundation.layout.ColumnScope.PlayerDetails(app: Ma
                         Text(np.channel, color = p.text, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                         val sub = listOf(np.subscribers, np.meta).filter { it.isNotBlank() }.joinToString("  ·  ")
                         if (sub.isNotEmpty()) Text(sub, color = p.dim, fontSize = 8.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    if (app.signedIn) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                            ActionPill(if (app.subscribed) "Subscribed" else "Subscribe", strong = !app.subscribed) { app.toggleSubscribe() }
+                            ActionPill(if (app.liked) "▲ Liked" else "▲ Like", lit = app.liked) { app.toggleLike() }
+                            ActionPill(if (app.saved) "✓ Saved" else "+ Save", lit = app.saved) { app.toggleSave() }
+                        }
                     }
                 }
             }
@@ -234,6 +279,55 @@ private fun androidx.compose.foundation.layout.ColumnScope.PlayerDetails(app: Ma
                 PlayerTab.COMMENTS -> CommentsPane(app, activeList)
             }
         }
+    }
+}
+
+/** Subscribe / Like / Save. [strong] is the bright "do this" look; [lit] shows it's on. */
+@Composable
+private fun ActionPill(label: String, strong: Boolean = false, lit: Boolean = false, onClick: () -> Unit) {
+    val p = LocalPalette.current
+    var focused by remember { mutableStateOf(false) }
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (strong) p.chipOn else p.card)
+            .border(2.dp, if (focused) p.accent else Color.Transparent, RoundedCornerShape(50))
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+    ) {
+        Text(
+            label,
+            color = when {
+                strong -> p.chipOnText
+                lit -> p.accent
+                else -> p.text
+            },
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+/** A short message along the bottom of the screen. */
+@Composable
+fun Toast(text: String?, modifier: Modifier) {
+    val p = LocalPalette.current
+    var shown by remember { mutableStateOf("") }
+    if (text != null) shown = text
+    val alpha by animateFloatAsState(if (text != null) 1f else 0f, tween(200), label = "toast")
+    if (alpha > 0f) {
+        Text(
+            shown,
+            color = p.bg,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = modifier
+                .graphicsLayer { this.alpha = alpha }
+                .clip(RoundedCornerShape(50))
+                .background(p.text)
+                .padding(horizontal = 14.dp, vertical = 7.dp),
+        )
     }
 }
 
@@ -424,7 +518,7 @@ fun MiniPlayer(app: MainActivity, np: NowPlaying, modifier: Modifier) {
     ) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color.Black)) {
             VideoSurface(app, Modifier.fillMaxSize())
-            if (!app.firstFrame) Thumb(np.video.thumbnail, Modifier.fillMaxSize())
+            if (!app.firstFrame && app.crtMode == CrtMode.OFF) Thumb(np.video.thumbnail, Modifier.fillMaxSize())
             // Progress along the bottom edge.
             val frac = if (app.durationMs > 0) (app.positionMs.toFloat() / app.durationMs).coerceIn(0f, 1f) else 0f
             Box(Modifier.align(Alignment.BottomStart).fillMaxWidth(frac).height(2.dp).background(p.accent))

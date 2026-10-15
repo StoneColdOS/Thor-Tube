@@ -231,3 +231,45 @@ private fun PlaylistGrid(items: List<YtPlaylist>, onOpen: (YtPlaylist) -> Unit) 
 const val SUBS_GRID = 10_000
 const val LIB_GRID = 20_000
 const val PLAYLIST_GRID = 30_000
+
+// ------------------------------------------------------------------ CRT
+
+/** The retro picture effect: off, a 90s curved tube, or a 2000s flat tube. Applies to every video. */
+@Composable
+fun CrtScreen(app: MainActivity) {
+    val p = LocalPalette.current
+    BackHandler { app.screen = Screen.HOME }
+    Column(Modifier.fillMaxSize().padding(14.dp)) {
+        Text("CRT effect", color = p.text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text("Makes videos look like they're on an old TV. Works in the player and the mini-player.", color = p.dim, fontSize = 9.5.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
+        CrtMode.entries.forEach { m ->
+            val on = m == app.crtMode
+            var focused by remember { mutableStateOf(false) }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (on) p.railOn else p.card)
+                    .border(2.dp, if (focused) p.accent else Color.Transparent, RoundedCornerShape(12.dp))
+                    .onFocusChanged { focused = it.isFocused }
+                    .clickable { app.setCrt(m) }
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier.size(14.dp).clip(CircleShape).border(2.dp, if (on) p.accent else p.dim, CircleShape).padding(3.dp),
+                ) {
+                    if (on) Box(Modifier.fillMaxSize().clip(CircleShape).background(p.accent))
+                }
+                Column(Modifier.padding(start = 10.dp)) {
+                    Text(m.label, color = p.text, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text(m.blurb, color = p.dim, fontSize = 9.sp)
+                }
+            }
+        }
+        if (app.nowPlaying != null) {
+            Text("Your video in the corner shows the effect live.", color = p.dim, fontSize = 9.sp, modifier = Modifier.padding(top = 4.dp))
+        }
+    }
+}

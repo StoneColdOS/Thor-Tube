@@ -28,7 +28,6 @@ data class YtPage(val videos: List<Video>, val playlists: List<YtPlaylist>, val 
 object YouTubeFeed {
 
     private const val TAG = "ThorTube"
-    private const val BROWSE = "https://www.youtube.com/youtubei/v1/browse?prettyPrint=false"
     const val TV_VERSION = "7.20260901.15.00"
     const val TV_USER_AGENT =
         "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/25.lts.30.1034943-gold (unlike Gecko), Unknown_TV_Unknown_0/Unknown (Unknown, Unknown)"
@@ -72,8 +71,15 @@ object YouTubeFeed {
         YtPage(videos.values.toList(), playlists.values.toList(), first.channels)
     }
 
-    /** One signed-in request. Retries once with a fresh token if YouTube says it's stale. */
-    private suspend fun browse(what: JSONObject): JSONObject? {
+    private suspend fun browse(what: JSONObject): JSONObject? = call("browse", what)
+
+    /**
+     * One signed-in request to YouTube's API as the TV app ("browse", "next", "like/like", ...).
+     * Retries once with a fresh token if YouTube says it's stale. Null when not signed in.
+     */
+    internal suspend fun call(endpoint: String, what: JSONObject): JSONObject? = withContext(Dispatchers.IO) { callBlocking(endpoint, what) }
+
+    private suspend fun callBlocking(endpoint: String, what: JSONObject): JSONObject? {
         for (attempt in 0..1) {
             val token = YouTubeAccount.token(forceRefresh = attempt == 1) ?: return null
             val locale = Locale.getDefault()
@@ -94,7 +100,7 @@ object YouTubeFeed {
                         .put("user", JSONObject().put("lockedSafetyMode", false)),
                 )
             what.keys().forEach { body.put(it, what.get(it)) }
-            val request = Request.Builder().url(BROWSE)
+            val request = Request.Builder().url("https://www.youtube.com/youtubei/v1/$endpoint?prettyPrint=false")
                 .header("Authorization", "Bearer $token")
                 .header("User-Agent", TV_USER_AGENT)
                 .header("Referer", "https://www.youtube.com/tv")
@@ -105,7 +111,7 @@ object YouTubeFeed {
                 .build()
             ThorTubeApp.http.newCall(request).execute().use { r ->
                 if (r.code == 401 && attempt == 0) return@use   // stale token: refresh and try again
-                check(r.isSuccessful) { "YouTube said ${r.code}" }
+                check(r.isSuccessful) { "YouTube $endpoint said ${r.code}" }
                 return JSONObject(r.body!!.string())
             }
         }

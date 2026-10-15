@@ -55,6 +55,8 @@ import io.github.stonecoldos.thortube.player.PlaybackAttempt
 import io.github.stonecoldos.thortube.player.PlaybackPlanner
 import io.github.stonecoldos.thortube.player.StreamCache
 import io.github.stonecoldos.thortube.youtube.YouTubeAccount
+import io.github.stonecoldos.thortube.youtube.YouTubeActions
+import io.github.stonecoldos.thortube.crt.CrtRenderer
 import io.github.stonecoldos.thortube.youtube.YouTubeFeed
 import io.github.stonecoldos.thortube.youtube.YtChannel
 import io.github.stonecoldos.thortube.youtube.YtPlaylist
@@ -167,6 +169,7 @@ class MainActivity : ComponentActivity() {
         hideSystemBars()
         settings = Settings(this)
         theme = settings.theme
+        crtMode = settings.crt
         sources = MediaSources(ThorTubeApp.http)
         player = ExoPlayer.Builder(this).build().apply { addListener(listener) }
 
@@ -188,6 +191,7 @@ class MainActivity : ComponentActivity() {
                                         Screen.SEARCH -> SearchScreen(this@MainActivity)
                                         Screen.SUBS -> SubsScreen(this@MainActivity)
                                         Screen.LIBRARY -> LibraryScreen(this@MainActivity)
+                                        Screen.CRT -> CrtScreen(this@MainActivity)
                                         Screen.SETUP -> SetupScreen(this@MainActivity)
                                         else -> ComingSoon(s)
                                     }
@@ -215,6 +219,7 @@ class MainActivity : ComponentActivity() {
                     ) {
                         lastPlaying?.let { MiniPlayer(this@MainActivity, it, Modifier) }
                     }
+                    Toast(toast, Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp))
                 }
             }
         }
@@ -251,6 +256,134 @@ class MainActivity : ComponentActivity() {
     }
 
     // ---------------------------------------------------------------- settings
+
+    // ---------------------------------------------------------------- CRT effect
+
+    var crtMode by mutableStateOf(CrtMode.OFF)
+        private set
+    private val crtViews = mutableListOf<CrtRenderer>()
+    private var crtActive: CrtRenderer? = null
+
+    fun setCrt(mode: CrtMode) {
+        crtMode = mode
+        settings.crt = mode
+    }
+
+    /** A tube view came up (full player or mini-player): its renderer takes over the picture. */
+    fun crtAttached(r: CrtRenderer) {
+        crtViews += r
+        r.applyLook(flat = crtMode == CrtMode.NOUGHTIES)
+        player.videoSize.let { v -> r.setVideoSize(v.width, v.height, v.pixelWidthHeightRatio) }
+        r.targetStatic = if (firstFrame) 0f else 1f
+    }
+
+    fun crtSurfaceReady(r: CrtRenderer, surface: android.view.Surface) {
+        crtActive = r
+        player.setVideoSurface(surface)
+    }
+
+    fun crtDetached(r: CrtRenderer) {
+        crtViews -= r
+        if (crtActive === r) {
+            r.playerSurface?.let { player.clearVideoSurface(it) }
+            crtActive = null
+        }
+    }
+
+    // ---------------------------------------------------------------- messages
+
+    /** A short message along the bottom, e.g. "Saved to Watch later". */
+    var toast by mutableStateOf<String?>(null)
+        private set
+    private var toastJob: Job? = null
+
+    fun say(text: String) {
+        toast = text
+        toastJob?.cancel()
+        toastJob = lifecycleScope.launch {
+            delay(2_200)
+            toast = null
+        }
+    }
+
+    // ---------------------------------------------------------------- like, subscribe, save
+
+    var liked by mutableStateOf(false)
+        private set
+    var subscribed by mutableStateOf(false)
+        private set
+    var saved by mutableStateOf(false)
+        private set
+    /** True once we know the like/subscribe state for what's playing. */
+    var actionsReady by mutableStateOf(false)
+        private set
+    private var channelId: String? = null
+    private var stateJob: Job? = null
+
+    private fun loadVideoState(video: Video, uploaderUrl: String?) {
+        liked = false
+        subscribed = false
+        saved = false
+        actionsReady = false
+        channelId = uploaderUrl?.let { Regex("UC[A-Za-z0-9_-]{22}").find(it)?.value }
+        stateJob?.cancel()
+        if (!signedIn || video.id.isEmpty()) return
+        stateJob = lifecycleScope.launch {
+            YouTubeActions.state(video.id)?.let {
+                liked = it.liked
+                subscribed = it.subscribed
+                if (channelId == null) channelId = it.channelId
+            }
+            actionsReady = true
+        }
+    }
+
+    fun toggleLike() {
+        val v = nowPlaying?.video ?: return
+        if (!signedIn) return say("Sign in (Setup) to like videos")
+        val on = !liked
+        liked = on
+        lifecycleScope.launch {
+            if (!YouTubeActions.like(v.id, on)) {
+                liked = !on
+                say("Couldn't update the like")
+            }
+        }
+    }
+
+    fun toggleSubscribe() {
+        val np = nowPlaying ?: return
+        if (!signedIn) return say("Sign in (Setup) to subscribe")
+        val id = channelId ?: return say("Couldn't find this channel")
+        val on = !subscribed
+        subscribed = on
+        lifecycleScope.launch {
+            if (YouTubeActions.subscribe(id, on)) {
+                say(if (on) "Subscribed to ${np.channel}" else "Unsubscribed from ${np.channel}")
+                subsChannels = emptyList()
+                subsFeed = FeedState()
+            } else {
+                subscribed = !on
+                say("Couldn't update the subscription")
+            }
+        }
+    }
+
+    fun toggleSave() {
+        val v = nowPlaying?.video ?: return
+        if (!signedIn) return say("Sign in (Setup) to save videos")
+        val on = !saved
+        saved = on
+        lifecycleScope.launch {
+            if (YouTubeActions.watchLater(v.id, on)) {
+                say(if (on) "Saved to Watch later" else "Removed from Watch later")
+                libFeeds.remove(LibTab.WATCH_LATER)
+            } else {
+                saved = !on
+                say("Couldn't update Watch later")
+            }
+        }
+    }
 
     fun setThemeMode(mode: ThemeMode) {
         theme = mode
@@ -344,6 +477,7 @@ class MainActivity : ComponentActivity() {
         thread = null
         loadComments(video.url)
         firstFrame = false
+        crtViews.forEach { it.targetStatic = 1f }   // a burst of snow until the new picture arrives
         playerProblem = null
         positionMs = 0
         durationMs = video.durationSecs * 1000
@@ -400,6 +534,7 @@ class MainActivity : ComponentActivity() {
                 ).joinToString("  ·  "),
             )
             if (nowPlaying != null) lastPlaying = nowPlaying
+            loadVideoState(video, info.uploaderUrl)
             attempts = PlaybackPlanner.plan(info)
             attemptIndex = 0
             if (attempts.isEmpty()) {
@@ -446,6 +581,11 @@ class MainActivity : ComponentActivity() {
 
         override fun onRenderedFirstFrame() {
             firstFrame = true
+            crtViews.forEach { it.targetStatic = 0f }
+        }
+
+        override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+            crtViews.forEach { it.setVideoSize(videoSize.width, videoSize.height, videoSize.pixelWidthHeightRatio) }
         }
 
         override fun onPlaybackStateChanged(state: Int) {
