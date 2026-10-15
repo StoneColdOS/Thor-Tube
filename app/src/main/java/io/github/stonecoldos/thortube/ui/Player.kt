@@ -3,7 +3,9 @@ package io.github.stonecoldos.thortube.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -164,8 +166,9 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
                     modifier = Modifier.align(Alignment.Center).background(Color(0xC0000000), RoundedCornerShape(8.dp)).padding(10.dp),
                 )
             }
-            AnimatedVisibility(controls, enter = fadeIn(tween(180)), exit = fadeOut(tween(260))) {
-                PlayerControls(app)
+            val controlsAlpha by animateFloatAsState(if (controls) 1f else 0f, tween(if (controls) 180 else 260), label = "controls")
+            if (controlsAlpha > 0f) {
+                Box(Modifier.fillMaxSize().graphicsLayer { alpha = controlsAlpha }) { PlayerControls(app) }
             }
         }
 
