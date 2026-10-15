@@ -187,7 +187,7 @@ class MainActivity : ComponentActivity() {
     private var cues: List<Cue> = emptyList()
     private var captionJob: Job? = null
 
-    fun setQuality(height: Int) {
+    fun chooseQuality(height: Int) {
         quality = height
         settings.quality = height
         val info = currentInfo ?: return
@@ -201,13 +201,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    fun setSpeed(value: Float) {
+    fun chooseSpeed(value: Float) {
         speed = value
         player.setPlaybackSpeed(value)
     }
 
     /** null turns captions off. The choice sticks for later videos. */
-    fun setCaption(track: CaptionTrack?) {
+    fun chooseCaption(track: CaptionTrack?) {
         settings.captionLang = track?.lang
         useCaption(track)
     }

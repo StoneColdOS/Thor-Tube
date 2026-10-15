@@ -392,8 +392,8 @@ private fun PlayerControls(app: MainActivity) {
             if (app.captionTracks.isNotEmpty()) {
                 RoundButton("CC", lit = app.caption != null) {
                     // Quick toggle: off, or back to the last language (or the best match for this device).
-                    if (app.caption != null) app.setCaption(null)
-                    else app.setCaption(Captions.pick(app.captionTracks, java.util.Locale.getDefault().language) ?: app.captionTracks.first())
+                    if (app.caption != null) app.chooseCaption(null)
+                    else app.chooseCaption(Captions.pick(app.captionTracks, java.util.Locale.getDefault().language) ?: app.captionTracks.first())
                 }
             }
             RoundButton("⚙") { app.optionsOpen = true }
@@ -452,16 +452,16 @@ private fun PlayerOptions(app: MainActivity) {
         ) {
             val autoLabel = if (app.quality == 0 && app.playingHeight > 0) "Auto (${app.playingHeight}p)" else "Auto"
             OptionRow("Quality") {
-                item { Box(Modifier.focusRequester(first)) { Chip(autoLabel, app.quality == 0) { app.setQuality(0) } } }
-                items(app.qualities) { h -> Chip("${h}p", app.quality == h) { app.setQuality(h) } }
+                item { Box(Modifier.focusRequester(first)) { Chip(autoLabel, app.quality == 0) { app.chooseQuality(0) } } }
+                items(app.qualities) { h -> Chip("${h}p", app.quality == h) { app.chooseQuality(h) } }
             }
             OptionRow("Speed") {
-                items(SPEEDS) { v -> Chip(if (v == 1f) "Normal" else "${v}x".replace(".0x", "x"), app.speed == v) { app.setSpeed(v) } }
+                items(SPEEDS) { v -> Chip(if (v == 1f) "Normal" else "${v}x".replace(".0x", "x"), app.speed == v) { app.chooseSpeed(v) } }
             }
             OptionRow("Captions") {
-                item { Chip("Off", app.caption == null) { app.setCaption(null) } }
+                item { Chip("Off", app.caption == null) { app.chooseCaption(null) } }
                 if (app.captionTracks.isEmpty()) item { Text("None for this video", color = Color(0xB0FFFFFF), fontSize = 10.sp, modifier = Modifier.padding(6.dp)) }
-                items(app.captionTracks) { t -> Chip(t.label, app.caption == t) { app.setCaption(t) } }
+                items(app.captionTracks) { t -> Chip(t.label, app.caption == t) { app.chooseCaption(t) } }
             }
         }
         RoundButton("✕", modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) { app.optionsOpen = false }
