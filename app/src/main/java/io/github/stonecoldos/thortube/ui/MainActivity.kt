@@ -9,7 +9,18 @@ import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.annotation.OptIn
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -19,7 +30,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.padding
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -30,6 +44,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import io.github.stonecoldos.thortube.AppLog
 import io.github.stonecoldos.thortube.ThorTubeApp
+import io.github.stonecoldos.thortube.data.Comment
+import io.github.stonecoldos.thortube.data.Comments
 import io.github.stonecoldos.thortube.data.Feeds
 import io.github.stonecoldos.thortube.data.HOME_TABS
 import io.github.stonecoldos.thortube.data.Video
@@ -51,6 +67,26 @@ enum class Screen(val label: String) { HOME("Home"), SUBS("Subs"), SEARCH("Searc
 
 /** What a grid shows: loading, a list, or what went wrong. */
 data class FeedState(val videos: List<Video> = emptyList(), val loading: Boolean = false, val error: String? = null, val at: Long = 0)
+
+enum class PlayerTab { UP_NEXT, COMMENTS }
+
+/** The comments under the current video. */
+data class CommentsUi(
+    val items: List<Comment> = emptyList(),
+    val next: org.schabi.newpipe.extractor.Page? = null,
+    val loading: Boolean = false,
+    val error: String? = null,
+    val count: Int = -1,
+    val disabled: Boolean = false,
+)
+
+/** One comment's replies, opened from the list. */
+data class ThreadUi(
+    val parent: Comment,
+    val items: List<Comment> = emptyList(),
+    val next: org.schabi.newpipe.extractor.Page? = null,
+    val loading: Boolean = false,
+)
 
 /** The player screen's details about what's on. */
 data class NowPlaying(
@@ -98,6 +134,18 @@ class MainActivity : ComponentActivity() {
     var controlsPing by mutableStateOf(0)
         private set
 
+    /** Drives the player's slide in and out; [lastPlaying] keeps it drawn while it slides away. */
+    val playerShown = MutableTransitionState(false)
+    var lastPlaying by mutableStateOf<NowPlaying?>(null)
+        private set
+
+    /** Where each Home tab was scrolled to, so coming back from a video lands where you left. */
+    private val gridStates = HashMap<Int, LazyGridState>()
+    fun gridState(tab: Int): LazyGridState = gridStates.getOrPut(tab) { LazyGridState() }
+
+    /** The video you last opened, so Home can put the highlight back on it. */
+    var returnTo by mutableStateOf<String?>(null)
+
     private var attempts: List<PlaybackAttempt> = emptyList()
     private var attemptIndex = 0
     private var playJob: Job? = null
@@ -116,20 +164,44 @@ class MainActivity : ComponentActivity() {
             val palette = paletteFor(theme, isSystemInDarkTheme())
             CompositionLocalProvider(LocalPalette provides palette) {
                 Box(Modifier.fillMaxSize().background(palette.bg)) {
-                    val playing = nowPlaying
-                    if (playing != null) {
-                        PlayerScreen(this@MainActivity, playing)
-                    } else {
+                    // The player slides up over everything. Once it fully covers the screen, the screens
+                    // underneath step aside so the controller can't wander behind it; they come back
+                    // (scrolled to where you were) the moment it starts sliding away.
+                    val shown = playerShown
+                    if (!(shown.currentState && shown.targetState) && !commentsPageOpen) {
                         Row(Modifier.fillMaxSize()) {
                             Rail(screen) { screen = it }
-                            Box(Modifier.weight(1f).fillMaxSize()) {
-                                when (screen) {
-                                    Screen.HOME -> HomeScreen(this@MainActivity)
-                                    Screen.SETUP -> SetupScreen(this@MainActivity)
-                                    else -> ComingSoon(screen)
+                            Crossfade(screen, Modifier.weight(1f).fillMaxSize(), animationSpec = tween(180), label = "screen") { s ->
+                                Box(Modifier.fillMaxSize()) {
+                                    when (s) {
+                                        Screen.HOME -> HomeScreen(this@MainActivity)
+                                        Screen.SEARCH -> SearchScreen(this@MainActivity)
+                                        Screen.SETUP -> SetupScreen(this@MainActivity)
+                                        else -> ComingSoon(s)
+                                    }
                                 }
                             }
                         }
+                    }
+                    // Comments with the whole screen, video in the corner.
+                    AnimatedVisibility(commentsPageOpen, enter = fadeIn(tween(180)), exit = fadeOut(tween(150))) {
+                        CommentsPage(this@MainActivity)
+                    }
+                    AnimatedVisibility(
+                        visibleState = shown,
+                        enter = slideInVertically(tween(260)) { it / 3 } + fadeIn(tween(200)),
+                        exit = slideOutVertically(tween(220)) { it / 3 } + fadeOut(tween(180)),
+                    ) {
+                        lastPlaying?.let { PlayerScreen(this@MainActivity, it) }
+                    }
+                    // The mini-player, bottom right, over whatever you're doing.
+                    AnimatedVisibility(
+                        visible = nowPlaying != null && minimized && !shown.targetState,
+                        enter = fadeIn(tween(200)) + scaleIn(tween(220), initialScale = 0.85f),
+                        exit = fadeOut(tween(150)) + scaleOut(tween(150), targetScale = 0.85f),
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp),
+                    ) {
+                        lastPlaying?.let { MiniPlayer(this@MainActivity, it, Modifier) }
                     }
                 }
             }
@@ -205,10 +277,51 @@ class MainActivity : ComponentActivity() {
 
     // ---------------------------------------------------------------- player
 
-    fun open(video: Video, list: List<Video>) {
+    var minimized by mutableStateOf(false)
+        private set
+    var commentsPageOpen by mutableStateOf(false)
+        private set
+
+    /** Shrink the video into the corner and keep it playing. */
+    fun minimize() {
+        if (nowPlaying == null) return
+        minimized = true
+        playerShown.targetState = false
+    }
+
+    /** Back to the full player. */
+    fun expand() {
+        if (nowPlaying == null) return
+        minimized = false
+        commentsPageOpen = false
+        playerShown.targetState = true
+    }
+
+    fun openCommentsPage() {
+        playerTab = PlayerTab.COMMENTS
+        commentsPageOpen = true
+        minimize()
+    }
+
+    fun closeCommentsPage() {
+        commentsPageOpen = false
+        thread = null
+    }
+
+    fun open(video: Video, list: List<Video>, stayMinimized: Boolean = false) {
         val upNext = list.dropWhile { it.url != video.url }.drop(1).ifEmpty { list.filter { it.url != video.url } }
         nowPlaying?.let { YouTubeHistory.flush(it.video.url, player.currentPosition / 1000f) }
         nowPlaying = NowPlaying(video, upNext)
+        lastPlaying = nowPlaying
+        if (!(stayMinimized && minimized)) {
+            minimized = false
+            commentsPageOpen = false
+            playerShown.targetState = true
+        }
+        returnTo = video.url
+        if (!commentsPageOpen) playerTab = PlayerTab.UP_NEXT
+        thread = null
+        loadComments(video.url)
         firstFrame = false
         playerProblem = null
         positionMs = 0
@@ -224,6 +337,10 @@ class MainActivity : ComponentActivity() {
         tickJob?.cancel()
         player.stop()
         nowPlaying = null
+        minimized = false
+        commentsPageOpen = false
+        playerShown.targetState = false
+        commentsJob?.cancel()
     }
 
     fun togglePause() {
@@ -260,6 +377,7 @@ class MainActivity : ComponentActivity() {
                     info.uploadDate?.instant?.toEpochMilli()?.let { ago(it) } ?: info.textualUploadDate,
                 ).joinToString("  ·  "),
             )
+            if (nowPlaying != null) lastPlaying = nowPlaying
             attempts = PlaybackPlanner.plan(info)
             attemptIndex = 0
             if (attempts.isEmpty()) {
@@ -311,7 +429,7 @@ class MainActivity : ComponentActivity() {
         override fun onPlaybackStateChanged(state: Int) {
             if (state == Player.STATE_ENDED) {
                 // Autoplay, like YouTube: on to the next one.
-                nowPlaying?.let { np -> np.upNext.firstOrNull()?.let { open(it, np.upNext) } }
+                nowPlaying?.let { np -> np.upNext.firstOrNull()?.let { open(it, np.upNext, stayMinimized = true) } }
             }
         }
 
@@ -326,12 +444,109 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // ---------------------------------------------------------------- search
+
+    var searchQuery by mutableStateOf("")
+        private set
+    var search by mutableStateOf(FeedState())
+        private set
+    /** Bumps each search so the results grid starts fresh. */
+    var searchRound by mutableStateOf(0)
+        private set
+
+    fun runSearch(text: String) {
+        val q = text.trim()
+        if (q.isEmpty()) return
+        searchQuery = q
+        searchRound++
+        search = FeedState(loading = true)
+        currentFocus?.let { v ->
+            getSystemService(android.view.inputmethod.InputMethodManager::class.java)?.hideSoftInputFromWindow(v.windowToken, 0)
+        }
+        lifecycleScope.launch {
+            search = runCatching { Feeds.search(q) }.fold(
+                { FeedState(it, at = System.currentTimeMillis()) },
+                {
+                    AppLog.w(TAG, "Search failed for $q", it)
+                    FeedState(error = "Search failed. Check the connection.")
+                },
+            )
+            Thumbnails.prefetch(search.videos.take(24).map { it.thumbnail })
+        }
+    }
+
+    // ---------------------------------------------------------------- comments
+
+    var playerTab by mutableStateOf(PlayerTab.UP_NEXT)
+    var comments by mutableStateOf(CommentsUi())
+        private set
+    var thread by mutableStateOf<ThreadUi?>(null)
+        private set
+    private var commentsJob: Job? = null
+
+    private fun loadComments(url: String) {
+        commentsJob?.cancel()
+        comments = CommentsUi(loading = true)
+        commentsJob = lifecycleScope.launch {
+            comments = runCatching { Comments.first(url) }.fold(
+                { CommentsUi(it.items, it.next, count = it.count, disabled = it.disabled) },
+                {
+                    AppLog.w(TAG, "Comments failed for $url", it)
+                    CommentsUi(error = "Couldn't load comments.")
+                },
+            )
+        }
+    }
+
+    /** Called as the list nears its end. */
+    fun moreComments() {
+        val np = nowPlaying ?: return
+        val t = thread
+        if (t != null) {
+            val next = t.next ?: return
+            if (t.loading) return
+            thread = t.copy(loading = true)
+            lifecycleScope.launch {
+                val page = runCatching { Comments.more(np.video.url, next) }.getOrNull()
+                thread = thread?.takeIf { it.parent.id == t.parent.id }?.let { cur ->
+                    if (page == null) cur.copy(loading = false, next = null)
+                    else cur.copy(items = cur.items + page.items, next = page.next, loading = false)
+                }
+            }
+            return
+        }
+        val c = comments
+        val next = c.next ?: return
+        if (c.loading) return
+        comments = c.copy(loading = true)
+        lifecycleScope.launch {
+            val page = runCatching { Comments.more(np.video.url, next) }.getOrNull()
+            comments = if (page == null) comments.copy(loading = false, next = null)
+            else comments.copy(items = comments.items + page.items, next = page.next, loading = false)
+        }
+    }
+
+    fun openThread(c: Comment) {
+        val first = c.replies ?: return
+        thread = ThreadUi(c, next = first)
+        moreComments()
+    }
+
+    fun closeThread() {
+        thread = null
+    }
+
+    /** Highlighting a card for a moment starts looking the video up, so opening it is quick. */
+    fun warm(video: Video) {
+        lifecycleScope.launch { StreamCache.warm(video.url) }
+    }
+
     // ---------------------------------------------------------------- controller
 
     /** Shoulder buttons: tabs on Home, skip 10 seconds in the player. */
     private fun shoulder(dir: Int) {
         when {
-            nowPlaying != null -> seekBy(dir * 10_000L)
+            nowPlaying != null && !minimized -> seekBy(dir * 10_000L)
             screen == Screen.HOME -> selectTab((tab + dir).mod(HOME_TABS.size))
         }
     }
@@ -350,8 +565,13 @@ class MainActivity : ComponentActivity() {
                 if (down && event.repeatCount == 0) shoulder(if (event.keyCode == KeyEvent.KEYCODE_BUTTON_L1) -1 else 1)
                 return true
             }
+            // X brings a minimized video back.
+            KeyEvent.KEYCODE_BUTTON_X -> {
+                if (down && event.repeatCount == 0 && minimized) expand()
+                return true
+            }
             KeyEvent.KEYCODE_BUTTON_START -> {
-                if (down && event.repeatCount == 0 && nowPlaying == null) screen = Screen.SETUP
+                if (down && event.repeatCount == 0 && (nowPlaying == null || minimized)) screen = Screen.SETUP
                 return true
             }
         }

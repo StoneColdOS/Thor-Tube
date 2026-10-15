@@ -3,6 +3,8 @@ package io.github.stonecoldos.thortube.ui
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.LruCache
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -74,22 +76,27 @@ object Thumbnails {
     }.onFailure { AppLog.d("ThorTube", "Thumbnail failed: $url ${it.message}") }.getOrNull()
 }
 
-/** A video's thumbnail, filled in when it arrives. Dark blue until then. */
+/** A video's thumbnail. Fades in when it arrives; already-loaded ones show at once. */
 @Composable
 fun Thumb(url: String?, modifier: Modifier, dim: Boolean = false) {
     // Keyed on the URL so a reused cell drops the old picture the moment its video changes.
-    var image by remember(url) { mutableStateOf(url?.let { Thumbnails.cached(it) }) }
+    val cached = remember(url) { url?.let { Thumbnails.cached(it) } }
+    var image by remember(url) { mutableStateOf(cached) }
+    val alpha = remember(url) { Animatable(if (cached != null) 1f else 0f) }
     LaunchedEffect(url) {
-        if (image == null && !url.isNullOrBlank()) image = Thumbnails.load(url)
+        if (image == null && !url.isNullOrBlank()) {
+            image = Thumbnails.load(url)
+            if (image != null) alpha.animateTo(1f, tween(220))
+        }
     }
-    Box(modifier.background(Color(0xFF0A1450))) {
+    Box(modifier.background(LocalPalette.current.card)) {
         image?.let {
             Image(
                 it,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
-                alpha = if (dim) 0.45f else 1f,
+                alpha = alpha.value * (if (dim) 0.45f else 1f),
             )
         }
     }

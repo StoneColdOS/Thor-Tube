@@ -1,6 +1,27 @@
 package io.github.stonecoldos.thortube.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,8 +51,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -59,9 +78,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.ui.AspectRatioFrameLayout
-import androidx.media3.ui.PlayerView
 import io.github.stonecoldos.thortube.BuildConfig
 import io.github.stonecoldos.thortube.data.HOME_TABS
 import io.github.stonecoldos.thortube.data.Video
@@ -146,7 +162,6 @@ private fun RailIcon(s: Screen, color: Color) {
 @Composable
 fun HomeScreen(app: MainActivity) {
     val p = LocalPalette.current
-    val state = app.feeds[app.tab] ?: FeedState(loading = true)
     Column(Modifier.fillMaxSize()) {
         // Tabs.
         val chips = rememberLazyListState()
@@ -160,23 +175,35 @@ fun HomeScreen(app: MainActivity) {
                 Chip(t.label, i == app.tab) { app.selectTab(i, refresh = i == app.tab) }
             }
         }
-        when {
-            state.videos.isEmpty() && state.loading -> Message("Loading...")
-            state.videos.isEmpty() && state.error != null -> Message(state.error, "Try again") { app.selectTab(app.tab, refresh = true) }
-            else -> VideoGrid(
-                videos = state.videos,
-                key = app.tab,
-                header = if (HOME_TABS[app.tab].isForYou && !app.signedIn) {
-                    { SignInBanner { app.screen = Screen.SETUP } }
-                } else null,
-                onOpen = { v -> app.open(v, state.videos) },
-            )
+        AnimatedContent(
+            targetState = app.tab,
+            transitionSpec = {
+                val dir = if (targetState > initialState) 1 else -1
+                (fadeIn(tween(200)) + slideInHorizontally(tween(220)) { dir * it / 12 }) togetherWith
+                    (fadeOut(tween(150)) + slideOutHorizontally(tween(220)) { -dir * it / 12 })
+            },
+            label = "tab",
+        ) { tab ->
+            val st = app.feeds[tab] ?: FeedState(loading = true)
+            when {
+                st.videos.isEmpty() && st.loading -> Message("Loading...")
+                st.videos.isEmpty() && st.error != null -> Message(st.error, "Try again") { app.selectTab(tab, refresh = true) }
+                else -> VideoGrid(
+                    app = app,
+                    videos = st.videos,
+                    tab = tab,
+                    header = if (HOME_TABS[tab].isForYou && !app.signedIn) {
+                        { SignInBanner { app.screen = Screen.SETUP } }
+                    } else null,
+                    onOpen = { v -> app.open(v, st.videos) },
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun Chip(label: String, on: Boolean, onClick: () -> Unit) {
+fun Chip(label: String, on: Boolean, onClick: () -> Unit) {
     val p = LocalPalette.current
     var focused by remember { mutableStateOf(false) }
     Box(
@@ -212,45 +239,146 @@ private fun SignInBanner(onClick: () -> Unit) {
     }
 }
 
-/** Three-across grid of videos that scrolls by touch or with the D-pad. */
-@Composable
-fun VideoGrid(videos: List<Video>, key: Any, header: (@Composable () -> Unit)?, onOpen: (Video) -> Unit) {
-    val grid = rememberLazyGridState()
-    val first = remember(key) { FocusRequester() }
-    LaunchedEffect(key) {
-        grid.scrollToItem(0)
-        runCatching { first.requestFocus() }
-    }
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
-        state = grid,
-        contentPadding = PaddingValues(start = 10.dp, end = 10.dp, bottom = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(9.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        if (header != null) item(span = { GridItemSpan(maxLineSpan) }) { header() }
-        itemsIndexed(videos, key = { _, v -> v.url }) { i, v ->
-            VideoCard(v, if (i == 0) Modifier.focusRequester(first) else Modifier) { onOpen(v) }
+/** Which card the highlight is on, and where it is on screen. */
+class RingState {
+    var owner by mutableStateOf<String?>(null)
+    var rect by mutableStateOf<Rect?>(null)
+
+    fun report(url: String, r: Rect?) {
+        if (r != null) {
+            owner = url
+            rect = r
+        } else if (owner == url) {
+            owner = null
         }
     }
 }
 
+/**
+ * Three-across grid of videos that scrolls by touch or with the D-pad. One highlight ring glides
+ * from card to card instead of each card drawing its own. Each tab keeps its scroll position, and
+ * coming back from a video puts the highlight back on it.
+ */
 @Composable
-fun VideoCard(v: Video, modifier: Modifier = Modifier, width: androidx.compose.ui.unit.Dp? = null, titleLines: Int = 2, onClick: () -> Unit) {
+fun VideoGrid(app: MainActivity, videos: List<Video>, tab: Int, header: (@Composable () -> Unit)?, onOpen: (Video) -> Unit) {
+    val grid = app.gridState(tab)
+    val ring = remember(tab) { RingState() }
+    val focus = remember(tab) { FocusRequester() }
+    var focusUrl by remember(tab) { mutableStateOf<String?>(null) }
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    val offset = if (header != null) 1 else 0
+    LaunchedEffect(tab) {
+        if (videos.isEmpty()) return@LaunchedEffect
+        val back = app.returnTo?.let { u -> videos.indexOfFirst { it.url == u } } ?: -1
+        val index = if (back >= 0) back else (grid.firstVisibleItemIndex - offset).coerceIn(0, videos.lastIndex)
+        val visible = grid.layoutInfo.visibleItemsInfo.map { it.index }
+        if (index + offset !in visible) grid.scrollToItem(index + offset)
+        focusUrl = videos[index].url
+        withFrameNanos { }
+        runCatching { focus.requestFocus() }
+        app.returnTo = null
+    }
+    Box(Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            state = grid,
+            contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 2.dp, bottom = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(9.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            if (header != null) item(span = { GridItemSpan(maxLineSpan) }) { header() }
+            itemsIndexed(videos, key = { _, v -> v.url }) { _, v ->
+                VideoCard(
+                    v,
+                    if (v.url == focusUrl) Modifier.focusRequester(focus) else Modifier,
+                    ownRing = false,
+                    onFocusRect = { r -> ring.report(v.url, r) },
+                    onDwell = { app.warm(v) },
+                ) { onOpen(v) }
+            }
+        }
+        FocusRing(ring, origin)
+    }
+}
+
+/** The one highlight ring for a grid: snaps in, then glides to whichever card is highlighted. */
+@Composable
+private fun FocusRing(ring: RingState, origin: Offset) {
+    val p = LocalPalette.current
+    val anim = remember { Animatable(Rect.Zero, Rect.VectorConverter) }
+    var placed by remember { mutableStateOf(false) }
+    val alpha by animateFloatAsState(if (ring.owner != null) 1f else 0f, tween(140), label = "ring")
+    LaunchedEffect(ring.rect, ring.owner) {
+        val target = ring.rect ?: return@LaunchedEffect
+        if (ring.owner == null) return@LaunchedEffect
+        if (!placed) {
+            anim.snapTo(target)
+            placed = true
+        } else {
+            anim.animateTo(target, spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow))
+        }
+    }
+    LaunchedEffect(ring.owner) {
+        if (ring.owner == null) {
+            delay(200)
+            if (ring.owner == null) placed = false
+        }
+    }
+    Canvas(Modifier.fillMaxSize().clipToBounds()) {
+        if (alpha <= 0f || !placed) return@Canvas
+        val r = anim.value.translate(-origin)
+        val pad = 3.dp.toPx()
+        drawRoundRect(
+            p.accent.copy(alpha = alpha),
+            topLeft = Offset(r.left - pad, r.top - pad),
+            size = Size(r.width + pad * 2, r.height + pad * 2),
+            cornerRadius = CornerRadius(11.dp.toPx()),
+            style = Stroke(2.5.dp.toPx()),
+        )
+    }
+}
+
+@Composable
+fun VideoCard(
+    v: Video,
+    modifier: Modifier = Modifier,
+    width: androidx.compose.ui.unit.Dp? = null,
+    titleLines: Int = 2,
+    ownRing: Boolean = true,
+    onFocusRect: (Rect?) -> Unit = {},
+    onDwell: () -> Unit = {},
+    onClick: () -> Unit,
+) {
     val p = LocalPalette.current
     var focused by remember { mutableStateOf(false) }
+    var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    // Resting on a card for a moment starts looking the video up.
+    LaunchedEffect(focused) {
+        if (focused) {
+            delay(400)
+            onDwell()
+        }
+    }
+    val ringAlpha by animateFloatAsState(if (focused && ownRing) 1f else 0f, tween(140), label = "card")
     Column(
         modifier
             .then(if (width != null) Modifier.width(width) else Modifier)
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) coords?.takeIf { c -> c.isAttached }?.let { c -> onFocusRect(c.boundsInRoot()) } else onFocusRect(null)
+            }
             .clickable(onClick = onClick),
     ) {
         Box(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
-                .border(2.5.dp, if (focused) p.accent else Color.Transparent, RoundedCornerShape(10.dp))
-                .padding(if (focused) 2.5.dp else 0.dp)
+                .onGloballyPositioned {
+                    coords = it
+                    if (focused) onFocusRect(it.boundsInRoot())
+                }
+                .border(2.5.dp, p.accent.copy(alpha = ringAlpha), RoundedCornerShape(10.dp))
+                .padding(if (ownRing) 2.5.dp else 0.dp)
                 .clip(RoundedCornerShape(8.dp)),
         ) {
             Thumb(v.thumbnail, Modifier.fillMaxSize())
@@ -297,7 +425,7 @@ fun Avatar(name: String, url: String?, size: androidx.compose.ui.unit.Dp) {
 }
 
 @Composable
-private fun Message(text: String, action: String? = null, onAction: () -> Unit = {}) {
+fun Message(text: String, action: String? = null, onAction: () -> Unit = {}) {
     val p = LocalPalette.current
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Text(text, color = p.dim, fontSize = 11.sp)
@@ -338,147 +466,6 @@ fun ComingSoon(s: Screen) {
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Text(what, color = p.text, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Text("Coming in a next step.", color = p.dim, fontSize = 10.sp)
-    }
-}
-
-// ------------------------------------------------------------------ player
-
-@Composable
-fun PlayerScreen(app: MainActivity, np: NowPlaying) {
-    val p = LocalPalette.current
-    BackHandler { app.close() }
-    var controls by remember { mutableStateOf(true) }
-    var lastPoke by remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(app.controlsPing) {
-        controls = true
-        lastPoke = System.currentTimeMillis()
-    }
-    LaunchedEffect(lastPoke, app.isPlaying) {
-        delay(3_000)
-        if (app.isPlaying) controls = false
-    }
-    val videoFocus = remember { FocusRequester() }
-    LaunchedEffect(np.video.url) { runCatching { videoFocus.requestFocus() } }
-
-    Column(Modifier.fillMaxSize()) {
-        // The video. Tap for controls; with the controller, A pauses and left/right skip 10 seconds.
-        var videoFocused by remember { mutableStateOf(false) }
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f)
-                .background(Color.Black)
-                .border(2.dp, if (videoFocused && !controls) p.accent.copy(alpha = 0.6f) else Color.Transparent)
-                .focusRequester(videoFocus)
-                .onFocusChanged { videoFocused = it.isFocused }
-                .onKeyEvent { e ->
-                    if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
-                    when (e.key) {
-                        Key.DirectionLeft -> { app.seekBy(-10_000); true }
-                        Key.DirectionRight -> { app.seekBy(10_000); true }
-                        Key.DirectionCenter, Key.Enter -> { app.togglePause(); true }
-                        else -> false
-                    }
-                }
-                .focusable()
-                .clickable(indication = null, interactionSource = null) {
-                    controls = !controls
-                    lastPoke = System.currentTimeMillis()
-                },
-        ) {
-            AndroidView(
-                factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        useController = false
-                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        player = app.player
-                        isFocusable = false
-                    }
-                },
-                modifier = Modifier.fillMaxSize(),
-            )
-            if (!app.firstFrame) Thumb(np.video.bigThumbnail, Modifier.fillMaxSize())
-            app.playerProblem?.let {
-                Text(
-                    it,
-                    color = Color.White,
-                    fontSize = 11.sp,
-                    modifier = Modifier.align(Alignment.Center).background(Color(0xC0000000), RoundedCornerShape(8.dp)).padding(10.dp),
-                )
-            }
-            if (controls) PlayerControls(app)
-        }
-
-        // Title, creator, and what's next.
-        Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp)) {
-            Text(np.title, color = p.text, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Avatar(np.channel, np.avatar, 22.dp)
-                Spacer(Modifier.width(6.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(np.channel, color = p.text, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                    val sub = listOf(np.subscribers, np.meta).filter { it.isNotBlank() }.joinToString("  ·  ")
-                    if (sub.isNotEmpty()) Text(sub, color = p.dim, fontSize = 8.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
-        }
-        if (np.upNext.isNotEmpty()) {
-            Text("Up next", color = p.text, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 10.dp, bottom = 4.dp))
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                itemsIndexed(np.upNext, key = { _, v -> v.url }) { _, v ->
-                    VideoCard(v, width = 112.dp, titleLines = 1) { app.open(v, np.upNext) }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PlayerControls(app: MainActivity) {
-    val p = LocalPalette.current
-    Box(Modifier.fillMaxSize().background(Color(0x55000000))) {
-        Row(
-            Modifier.align(Alignment.Center),
-            horizontalArrangement = Arrangement.spacedBy(28.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            RoundButton("-10") { app.seekBy(-10_000) }
-            RoundButton(if (app.isPlaying) "||" else "▶", big = true) { app.togglePause() }
-            RoundButton("+10") { app.seekBy(10_000) }
-        }
-        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 10.dp)) {
-            Text(
-                "${formatDuration(app.positionMs / 1000).ifEmpty { "0:00" }} / ${formatDuration(app.durationMs / 1000).ifEmpty { "--:--" }}",
-                color = Color.White,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            val dur = app.durationMs.coerceAtLeast(1)
-            Slider(
-                value = (app.positionMs.toFloat() / dur).coerceIn(0f, 1f),
-                onValueChange = { app.seekTo((it * dur).toLong()) },
-                colors = SliderDefaults.colors(thumbColor = p.accent, activeTrackColor = p.accent, inactiveTrackColor = Color(0x80FFFFFF)),
-                modifier = Modifier.height(22.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun RoundButton(label: String, big: Boolean = false, onClick: () -> Unit) {
-    val s = if (big) 44.dp else 34.dp
-    Box(
-        Modifier
-            .size(s)
-            .clip(CircleShape)
-            .background(Color(0x99000000))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(label, color = Color.White, fontSize = if (big) 15.sp else 10.sp, fontWeight = FontWeight.Bold)
     }
 }
 
