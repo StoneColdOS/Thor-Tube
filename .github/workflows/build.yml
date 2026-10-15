@@ -32,6 +32,10 @@ jobs:
             done
             exit 1
           fi
+          # Kotlin warnings as annotations too, so they're easy to spot and fix.
+          grep -E "^w: " build.log | sed 's#file:///home/runner/work/Thor-Tube/Thor-Tube/##' | head -50 | while IFS= read -r line; do
+            echo "::warning::${line}"
+          done
           cp app/build/outputs/apk/debug/app-debug.apk Thor-Tube-latest.apk
 
       - uses: actions/upload-artifact@v4
