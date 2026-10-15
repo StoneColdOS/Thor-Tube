@@ -326,8 +326,11 @@ class MainActivity : ComponentActivity() {
     /** CRT power effect: 1 = picture fully on, 0 = collapsed to a dot. */
     val power = androidx.compose.animation.core.Animatable(1f)
 
-    private suspend fun powerOff() = power.animateTo(0f, androidx.compose.animation.core.tween(320, easing = androidx.compose.animation.core.FastOutLinearInEasing))
-    private suspend fun powerOn() {
+    // Animations need Compose's frame clock, which lifecycleScope doesn't carry; AndroidUiDispatcher does.
+    private suspend fun powerOff() = kotlinx.coroutines.withContext(androidx.compose.ui.platform.AndroidUiDispatcher.Main) {
+        power.animateTo(0f, androidx.compose.animation.core.tween(320, easing = androidx.compose.animation.core.FastOutLinearInEasing))
+    }
+    private suspend fun powerOn() = kotlinx.coroutines.withContext(androidx.compose.ui.platform.AndroidUiDispatcher.Main) {
         power.snapTo(0f)
         power.animateTo(1f, androidx.compose.animation.core.tween(520, easing = androidx.compose.animation.core.LinearOutSlowInEasing))
     }
