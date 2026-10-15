@@ -75,6 +75,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.focusGroup
 import io.github.stonecoldos.thortube.data.Captions
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -148,6 +149,7 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
     BackHandler {
         when {
             app.optionsOpen -> app.optionsOpen = false
+            app.panelOpen -> app.panelOpen = false
             app.fullscreen -> app.fullscreen = false
             else -> app.minimize()
         }
@@ -188,6 +190,20 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
     val cfg = androidx.compose.ui.platform.LocalConfiguration.current
     val wide = cfg.screenWidthDp.toFloat() / cfg.screenHeightDp.coerceAtLeast(1) > 1.45f
     val full = app.fullscreen || wide
+    // Wide screen: the rest of the player lives in a panel you pull up over the video.
+    val canPanel = wide && !app.fullscreen
+    val panelFocus = remember { FocusRequester() }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    LaunchedEffect(app.panelOpen) {
+        if (app.panelOpen) {
+            controls = false
+            delay(260)
+            val ok = runCatching { panelFocus.requestFocus() }.getOrDefault(false)
+            if (!ok) focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down)
+        } else {
+            runCatching { videoFocus.requestFocus() }
+        }
+    }
     Column(Modifier.fillMaxSize().background(p.bg).clipToBounds()) {
         // The video. Tap for controls, swipe down to shrink it. Controller: A pauses, left/right skip 10 s.
         Box(
@@ -197,7 +213,9 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
                 .onKeyEvent { e ->
                     if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
                     if (app.optionsOpen) return@onKeyEvent false   // let the controller move around the options
+                    if (app.panelOpen) return@onKeyEvent false     // ...or around the pulled-up panel
                     when (e.key) {
+                        Key.DirectionDown -> if (canPanel) { app.panelOpen = true; true } else false
                         Key.DirectionLeft -> { app.seekBy(-10_000); true }
                         Key.DirectionRight -> { app.seekBy(10_000); true }
                         Key.DirectionCenter, Key.Enter -> { app.togglePause(); true }
@@ -205,13 +223,16 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
                     }
                 }
                 .focusable()
-                .pointerInput(Unit) {
+                .pointerInput(canPanel) {
                     var drag = 0f
                     detectVerticalDragGestures(
                         onDragStart = { drag = 0f },
                         onDragEnd = {
                             // Swipe up to fill the screen; swipe down to leave full screen, then to shrink.
+                            // On the wide top screen, swipe up pulls up the panel and swipe down puts it away.
                             when {
+                                canPanel && drag < -60.dp.toPx() -> app.panelOpen = true
+                                canPanel && drag > 60.dp.toPx() && app.panelOpen -> app.panelOpen = false
                                 drag < -60.dp.toPx() && !app.fullscreen -> app.toggleFullscreen()
                                 drag > 60.dp.toPx() && app.fullscreen -> app.toggleFullscreen()
                                 drag > 60.dp.toPx() -> app.minimize()
@@ -238,6 +259,10 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
                             if (side != 0) skipOn(side) else app.togglePause()
                         },
                         onTap = { o ->
+                            if (app.panelOpen) {
+                                app.panelOpen = false
+                                return@detectTapGestures
+                            }
                             val side = sideOf(o.x)
                             if (skip != null && side == skip?.first) skipOn(side)
                             else {
@@ -290,7 +315,37 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
             }
             val controlsAlpha by animateFloatAsState(if (controls) 1f else 0f, tween(if (controls) 180 else 260), label = "controls")
             if (controlsAlpha > 0f) {
-                Box(Modifier.fillMaxSize().graphicsLayer { alpha = controlsAlpha }) { PlayerControls(app) }
+                Box(Modifier.fillMaxSize().graphicsLayer { alpha = controlsAlpha }) { PlayerControls(app, panelTab = canPanel) }
+            }
+            // The pull-up panel: title, Up next and comments over the bottom of the video.
+            androidx.compose.animation.AnimatedVisibility(
+                app.panelOpen && canPanel,
+                enter = androidx.compose.animation.slideInVertically(tween(240)) { it } + fadeIn(tween(160)),
+                exit = androidx.compose.animation.slideOutVertically(tween(220)) { it } + fadeOut(tween(160)),
+                modifier = Modifier.align(Alignment.BottomCenter),
+            ) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.62f)
+                        .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                        .background(p.bg.copy(alpha = 0.97f))
+                        .clickable(indication = null, interactionSource = null) { }
+                        .focusRequester(panelFocus)
+                        .focusGroup(),
+                ) {
+                    // Grab handle: tap it to put the panel away.
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable(indication = null, interactionSource = null) { app.panelOpen = false }
+                            .padding(top = 6.dp, bottom = 2.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(Modifier.width(44.dp).height(4.dp).clip(RoundedCornerShape(50)).background(p.dim))
+                    }
+                    PlayerDetails(app, np, showInfo, activeList)
+                }
             }
             androidx.compose.animation.AnimatedVisibility(
                 app.optionsOpen,
@@ -452,7 +507,7 @@ private fun shortCount(n: Int): String = when {
 }
 
 @Composable
-private fun PlayerControls(app: MainActivity) {
+private fun PlayerControls(app: MainActivity, panelTab: Boolean = false) {
     val p = LocalPalette.current
     Box(Modifier.fillMaxSize().background(Color(0x55000000))) {
         Row(
@@ -475,6 +530,21 @@ private fun PlayerControls(app: MainActivity) {
             }
             RoundButton("⚙") { app.optionsOpen = true }
             RoundButton(if (app.fullscreen) "⤡" else "⛶") { app.toggleFullscreen() }
+        }
+        if (panelTab) {
+            Text(
+                "︿  Up next & comments",
+                color = Color.White,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 50.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color(0x99000000))
+                    .clickable { app.panelOpen = true }
+                    .padding(horizontal = 12.dp, vertical = 5.dp),
+            )
         }
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 10.dp)) {
             val shownMs = app.scrubMs ?: app.positionMs

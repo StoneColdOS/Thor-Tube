@@ -169,6 +169,8 @@ class MainActivity : ComponentActivity() {
 
     // ---- player options: quality, speed, captions
     var optionsOpen by mutableStateOf(false)
+    /** Top screen only: the Up next / comments panel pulled up over the video. */
+    var panelOpen by mutableStateOf(false)
     /** Tallest picture wanted (0 = Auto); remembered between videos and launches. */
     var quality by mutableStateOf(0)
         private set
@@ -657,6 +659,7 @@ class MainActivity : ComponentActivity() {
         crtViews.forEach { it.targetStatic = 1f }   // a burst of snow until the new picture arrives
         playerProblem = null
         optionsOpen = false
+        panelOpen = false
         currentInfo = null
         qualities = emptyList()
         captionTracks = emptyList()
