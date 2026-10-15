@@ -69,6 +69,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -155,7 +156,7 @@ fun TvLogo(modifier: Modifier) {
         drawPath(depth, androidx.compose.ui.graphics.lerp(body, Color.Black, 0.35f))
         drawRoundRect(body, o(21f, 30f), Size(57f * k, 54f * k), CornerRadius(5f * k))
         drawRoundRect(Color(0xFF0B1118), o(26.5f, 35f), Size(46f * k, 32f * k), CornerRadius(2f * k))
-        androidx.compose.ui.graphics.drawscope.rotate(-15f, o(49.5f, 51f)) {
+        rotate(-15f, o(49.5f, 51f)) {
             drawRoundRect(hammer, o(39.5f, 40f), Size(20f * k, 12f * k), CornerRadius(1.6f * k))
             drawRoundRect(hammer, o(47.6f, 51.5f), Size(3.8f * k, 12f * k), CornerRadius(1.2f * k))
             drawRoundRect(hammer, o(46.6f, 62f), Size(5.8f * k, 3.2f * k), CornerRadius(1.4f * k))
