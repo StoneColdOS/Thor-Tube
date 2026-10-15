@@ -91,7 +91,7 @@ import kotlinx.coroutines.delay
 
 /** The slim strip on the left: one button per screen. */
 @Composable
-fun Rail(current: Screen, signedIn: Boolean, me: Pair<String, String?>?, onSwipe: (down: Boolean) -> Unit = {}, onPick: (Screen) -> Unit) {
+fun Rail(current: Screen, signedIn: Boolean, me: Pair<String, String?>?, focus: FocusRequester? = null, onSwipe: (down: Boolean) -> Unit = {}, onPick: (Screen) -> Unit) {
     val p = LocalPalette.current
     // Every button spread evenly down the full height: no dead gap, more room for thumbs.
     Column(
@@ -115,7 +115,7 @@ fun Rail(current: Screen, signedIn: Boolean, me: Pair<String, String?>?, onSwipe
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceEvenly,
     ) {
-        Screen.entries.forEach { s -> RailButton(s.label, s == current, { onPick(s) }) { RailIcon(s, it) } }
+        Screen.entries.forEach { s -> RailButton(s.label, s == current, { onPick(s) }, if (s == current) focus else null) { RailIcon(s, it) } }
         // Your account: profile picture when signed in, a plain person when not. Opens Setup.
         RailButton("You", false, { onPick(Screen.SETUP) }) { tint ->
             if (signedIn && me != null) {
@@ -135,12 +135,13 @@ fun Rail(current: Screen, signedIn: Boolean, me: Pair<String, String?>?, onSwipe
 }
 
 @Composable
-private fun RailButton(label: String, on: Boolean, onClick: () -> Unit, icon: @Composable (Color) -> Unit) {
+private fun RailButton(label: String, on: Boolean, onClick: () -> Unit, focus: FocusRequester? = null, icon: @Composable (Color) -> Unit) {
     val p = LocalPalette.current
     var focused by remember { mutableStateOf(false) }
     Column(
         Modifier
             .width(52.dp)
+            .then(if (focus != null) Modifier.focusRequester(focus) else Modifier)
             .clip(RoundedCornerShape(12.dp))
             .background(if (on) p.railOn else Color.Transparent)
             .border(2.dp, if (focused) p.accent else Color.Transparent, RoundedCornerShape(12.dp))

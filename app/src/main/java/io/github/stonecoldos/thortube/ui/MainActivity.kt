@@ -33,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
@@ -243,7 +244,7 @@ class MainActivity : ComponentActivity() {
             val palette = paletteFor(theme, isSystemInDarkTheme())
             CompositionLocalProvider(LocalPalette provides palette) {
                 Box(Modifier.fillMaxSize().background(Color.Black)) {
-                Box(Modifier.fillMaxSize().crtPower(power.value).background(palette.bg)) {
+                Box(Modifier.fillMaxSize().crtPower(power.value).background(palette.bg).onFocusChanged { appHasFocus = it.hasFocus }) {
                     // The player slides up over everything. Once it fully covers the screen, the screens
                     // underneath step aside so the controller can't wander behind it; they come back
                     // (scrolled to where you were) the moment it starts sliding away.
@@ -254,7 +255,7 @@ class MainActivity : ComponentActivity() {
                                 me = if (signedIn) runCatching { YouTubeFeed.me() }.getOrNull() else null
                                 if (signedIn) AppLog.d(TAG, "Account: name=${me?.first?.isNotBlank()} photo=${me?.second}")
                             }
-                            Rail(screen, signedIn, me, onSwipe = { down -> moveScreen(down) }) { screen = it }
+                            Rail(screen, signedIn, me, railFocus, onSwipe = { down -> moveScreen(down) }) { screen = it }
                             Crossfade(screen, Modifier.weight(1f).fillMaxSize(), animationSpec = tween(180), label = "screen") { s ->
                                 Box(Modifier.fillMaxSize()) {
                                     when (s) {
@@ -1011,8 +1012,35 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Whether anything inside the app holds the controller highlight right now. */
+    private var appHasFocus = false
+    /** The sidebar button for the current screen; the highlight lands here if it's nowhere. */
+    val railFocus = androidx.compose.ui.focus.FocusRequester()
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        AppLog.d(TAG, "Input: window focus=$hasFocus on display ${display?.displayId}")
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val down = event.action == KeyEvent.ACTION_DOWN
+        if (down && event.repeatCount == 0) {
+            AppLog.d(
+                TAG,
+                "Input: key ${KeyEvent.keyCodeToString(event.keyCode)} src=0x${Integer.toHexString(event.source)} " +
+                    "display=${display?.displayId} windowFocus=${hasWindowFocus()} highlight=$appHasFocus screen=$screen",
+            )
+        }
+        // Arrow keys with nothing highlighted would go nowhere: put the highlight on the sidebar first.
+        val arrow = event.keyCode == KeyEvent.KEYCODE_DPAD_UP || event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
+            event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+        if (arrow && !appHasFocus && nowPlaying.let { it == null || minimized }) {
+            if (down) {
+                val ok = runCatching { railFocus.requestFocus() }.isSuccess
+                AppLog.d(TAG, "Input: nothing highlighted, moved highlight to the sidebar (ok=$ok)")
+            }
+            return true
+        }
         when (event.keyCode) {
             // A presses whatever's highlighted.
             KeyEvent.KEYCODE_BUTTON_A -> return super.dispatchKeyEvent(remap(event, KeyEvent.KEYCODE_DPAD_CENTER))
@@ -1056,6 +1084,14 @@ class MainActivity : ComponentActivity() {
         if (!pad || event.action != MotionEvent.ACTION_MOVE) return super.dispatchGenericMotionEvent(event)
         val x = direction(event.getAxisValue(MotionEvent.AXIS_HAT_X), event.getAxisValue(MotionEvent.AXIS_X))
         val y = direction(event.getAxisValue(MotionEvent.AXIS_HAT_Y), event.getAxisValue(MotionEvent.AXIS_Y))
+        if ((x != heldX || y != heldY) && (x != 0 || y != 0)) {
+            AppLog.d(
+                TAG,
+                "Input: stick/hat x=$x y=$y (hat ${event.getAxisValue(MotionEvent.AXIS_HAT_X)},${event.getAxisValue(MotionEvent.AXIS_HAT_Y)} " +
+                    "stick ${"%.2f".format(event.getAxisValue(MotionEvent.AXIS_X))},${"%.2f".format(event.getAxisValue(MotionEvent.AXIS_Y))}) " +
+                    "from ${event.device?.name} display=${display?.displayId} windowFocus=${hasWindowFocus()}",
+            )
+        }
         if (x != heldX || y != heldY) {
             heldX = x
             heldY = y
