@@ -57,6 +57,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -182,10 +183,15 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
         }
     }
 
-    Column(Modifier.fillMaxSize().background(p.bg)) {
+    // On a wide screen (the Thor's top screen is 16:9) a full-width video already fills the height,
+    // so there's no room under it: show the video alone, edge to edge.
+    val cfg = androidx.compose.ui.platform.LocalConfiguration.current
+    val wide = cfg.screenWidthDp.toFloat() / cfg.screenHeightDp.coerceAtLeast(1) > 1.45f
+    val full = app.fullscreen || wide
+    Column(Modifier.fillMaxSize().background(p.bg).clipToBounds()) {
         // The video. Tap for controls, swipe down to shrink it. Controller: A pauses, left/right skip 10 s.
         Box(
-            (if (app.fullscreen) Modifier.fillMaxSize() else Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+            (if (full) Modifier.fillMaxSize() else Modifier.fillMaxWidth().aspectRatio(16f / 9f))
                 .background(Color.Black)
                 .focusRequester(videoFocus)
                 .onKeyEvent { e ->
@@ -248,7 +254,7 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
                 Text(
                     "${formatDuration(ms / 1000).ifEmpty { "0:00" }}  /  ${formatDuration(app.durationMs / 1000)}",
                     color = Color.White,
-                    fontSize = if (app.fullscreen) 22.sp else 16.sp,
+                    fontSize = if (full) 22.sp else 16.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
                         .align(Alignment.TopCenter)
@@ -272,8 +278,8 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
                 Text(
                     app.captionText,
                     color = Color.White,
-                    fontSize = if (app.fullscreen) 15.sp else 11.sp,
-                    lineHeight = if (app.fullscreen) 19.sp else 14.sp,
+                    fontSize = if (full) 15.sp else 11.sp,
+                    lineHeight = if (full) 19.sp else 14.sp,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -294,7 +300,7 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
             ) { PlayerOptions(app) }
         }
 
-        if (!app.fullscreen) PlayerDetails(app, np, showInfo, activeList)
+        if (!full) PlayerDetails(app, np, showInfo, activeList)
     }
 }
 
