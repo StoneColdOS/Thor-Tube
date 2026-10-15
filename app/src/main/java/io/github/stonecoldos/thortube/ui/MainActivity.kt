@@ -289,6 +289,7 @@ class MainActivity : ComponentActivity() {
                         lastPlaying?.let { MiniPlayer(this@MainActivity, it, Modifier) }
                     }
                     Toast(toast, Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp))
+                    ScreenBanner(screenBanner, Modifier.align(Alignment.Center))
                 }
             }
         }
@@ -319,6 +320,24 @@ class MainActivity : ComponentActivity() {
     // ---------------------------------------------------------------- moving between the Thor's screens
 
     private var moving = false
+    /** Shown for a moment after a move: true = arrived on the bottom screen, false = the top. */
+    var screenBanner by mutableStateOf<Boolean?>(null)
+        private set
+    private var bannerJob: Job? = null
+
+    private fun buzz() = runCatching {
+        val v = getSystemService(android.os.VibratorManager::class.java).defaultVibrator
+        v.vibrate(android.os.VibrationEffect.createOneShot(45, 200))
+    }
+
+    private fun announceScreen(down: Boolean) {
+        bannerJob?.cancel()
+        screenBanner = down
+        bannerJob = lifecycleScope.launch {
+            delay(1_400)
+            screenBanner = null
+        }
+    }
     private var resumeAfterMove = false
     private var pendingStartMs = 0L
 
@@ -336,6 +355,7 @@ class MainActivity : ComponentActivity() {
         if (target == null) return say("Couldn't find the bottom screen")
         if (target == here) return say(if (down) "Already on the bottom screen" else "Already on the top screen")
         AppLog.i(TAG, "Moving from display $here to $target")
+        buzz()
         resumeAfterMove = player.playWhenReady
         moving = true
         val options = android.app.ActivityOptions.makeBasic().setLaunchDisplayId(target).toBundle()
@@ -343,13 +363,17 @@ class MainActivity : ComponentActivity() {
         // Android normally carries the running app across. If it didn't, start over on the other
         // screen and pick the video back up where it was.
         lifecycleScope.launch {
-            delay(1_200)
-            if ((display?.displayId ?: here) != here) {
-                AppLog.i(TAG, "Moved to display $target")
-                return@launch
+            repeat(12) {
+                delay(100)
+                if ((display?.displayId ?: here) != here) {
+                    AppLog.i(TAG, "Moved to display $target")
+                    announceScreen(down)
+                    return@launch
+                }
             }
             AppLog.w(TAG, "Android kept us on display $here; relaunching on $target")
             val restart = Intent(applicationContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .putExtra(EXTRA_MOVED, if (down) 1 else 0)
             nowPlaying?.let {
                 restart.putExtra(EXTRA_URL, it.video.url)
                 restart.putExtra(EXTRA_POSITION, player.currentPosition)
@@ -370,6 +394,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleLink(intent: Intent?) {
+        intent?.getIntExtra(EXTRA_MOVED, -1)?.takeIf { it >= 0 }?.let {
+            intent.removeExtra(EXTRA_MOVED)
+            announceScreen(it == 1)
+        }
         intent?.getStringExtra(EXTRA_URL)?.let { url ->
             intent.removeExtra(EXTRA_URL)
             pendingStartMs = intent.getLongExtra(EXTRA_POSITION, 0L)
@@ -1136,6 +1164,7 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_URL = "io.github.stonecoldos.thortube.URL"
         const val EXTRA_CHANNEL = "io.github.stonecoldos.thortube.CHANNEL"
         const val EXTRA_POSITION = "io.github.stonecoldos.thortube.POSITION"
+        const val EXTRA_MOVED = "io.github.stonecoldos.thortube.MOVED"
         private const val TAG = "ThorTube"
     }
 }

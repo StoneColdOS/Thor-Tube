@@ -363,6 +363,30 @@ fun Toast(text: String?, modifier: Modifier) {
     }
 }
 
+/** A big "you're on the bottom/top screen now" card that pops in after a swipe move. */
+@Composable
+fun ScreenBanner(down: Boolean?, modifier: Modifier) {
+    val p = LocalPalette.current
+    var shown by remember { mutableStateOf(true) }
+    if (down != null) shown = down
+    val t by animateFloatAsState(if (down != null) 1f else 0f, tween(if (down != null) 220 else 300), label = "banner")
+    if (t > 0f) {
+        Column(
+            modifier
+                .graphicsLayer { alpha = t; scaleX = 0.85f + 0.15f * t; scaleY = 0.85f + 0.15f * t }
+                .clip(RoundedCornerShape(18.dp))
+                .background(p.card)
+                .border(2.dp, p.accent, RoundedCornerShape(18.dp))
+                .padding(horizontal = 28.dp, vertical = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(if (shown) "⬇" else "⬆", color = p.accent, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+            Text(if (shown) "Bottom screen" else "Top screen", color = p.text, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(if (shown) "Swipe up on the sidebar to send it back" else "Swipe down on the sidebar to send it back", color = p.dim, fontSize = 10.sp)
+        }
+    }
+}
+
 private fun commentsLabel(c: CommentsUi) = when {
     c.count > 0 -> "Comments  ${shortCount(c.count)}"
     else -> "Comments"
