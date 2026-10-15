@@ -1,18 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A chunky 3D TV with rabbit ears and Thor's hammer on the screen. -->
+<!-- Themed-icon silhouette. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="1.95" android:strokeLineCap="round" android:pathData="M43.5,37.65 L34.4,25.95" />
-    <path android:fillColor="#FFFFFFFF" android:pathData="M31.15,25.3 a2.6,2.6 0 1 0 5.2,0 a2.6,2.6 0 1 0 -5.2,0 z" />
-    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="1.95" android:strokeLineCap="round" android:pathData="M51.3,37.65 L61.7,26.6" />
-    <path android:fillColor="#FFFFFFFF" android:pathData="M59.75,25.95 a2.6,2.6 0 1 0 5.2,0 a2.6,2.6 0 1 0 -5.2,0 z" />
-    <path android:fillColor="#FFFFFFFF" android:pathData="M24,41.55 L38.3,33.75 L83.8,33.75 L69.5,41.55 Z" />
-    <path android:fillColor="#FFFFFFFF" android:pathData="M69.5,41.55 L83.8,33.75 L83.8,72.75 L69.5,81.85 Z" />
-    <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="M29.2,41.55 h35.1 a5.2,5.2 0 0 1 5.2,5.2 v29.9 a5.2,5.2 0 0 1 -5.2,5.2 h-35.1 a5.2,5.2 0 0 1 -5.2,-5.2 v-29.9 a5.2,5.2 0 0 1 5.2,-5.2 z M33.1,46.1 h27.3 a4.55,4.55 0 0 1 4.55,4.55 v22.1 a4.55,4.55 0 0 1 -4.55,4.55 h-27.3 a4.55,4.55 0 0 1 -4.55,-4.55 v-22.1 a4.55,4.55 0 0 1 4.55,-4.55 z" />
-    <group android:rotation="-30" android:pivotX="46.75" android:pivotY="61.7">
-    <path android:fillColor="#FFFFFFFF" android:pathData="M40.58,50 h12.35 a1.62,1.62 0 0 1 1.62,1.62 v7.15 a1.62,1.62 0 0 1 -1.62,1.62 h-12.35 a1.62,1.62 0 0 1 -1.62,-1.62 v-7.15 a1.62,1.62 0 0 1 1.62,-1.62 z" />
-    <path android:fillColor="#FFFFFFFF" android:pathData="M46.42,59.75 h0.65 a1.3,1.3 0 0 1 1.3,1.3 v10.4 a1.3,1.3 0 0 1 -1.3,1.3 h-0.65 a1.3,1.3 0 0 1 -1.3,-1.3 v-10.4 a1.3,1.3 0 0 1 1.3,-1.3 z" />
-    <path android:fillColor="#FFFFFFFF" android:pathData="M45.45,71.45 h2.6 a1.3,1.3 0 0 1 1.3,1.3 v0.33 a1.3,1.3 0 0 1 -1.3,1.3 h-2.6 a1.3,1.3 0 0 1 -1.3,-1.3 v-0.33 a1.3,1.3 0 0 1 1.3,-1.3 z" />
+    <group android:scaleX="0.613" android:scaleY="0.613" android:pivotX="54" android:pivotY="54" android:translateY="1.333">
+        <path android:fillColor="#FFFFFFFF" android:pathData="M24,31 L36,24 L87,24 L77,31 Z" />
+        <path android:fillColor="#FFFFFFFF" android:pathData="M77,31 L87,24 L87,72 L77,83 Z" />
+        <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="M26,30 h47 a5,5 0 0 1 5,5 v44 a5,5 0 0 1 -5,5 h-47 a5,5 0 0 1 -5,-5 v-44 a5,5 0 0 1 5,-5 z M28.5,35 h42 a2,2 0 0 1 2,2 v28 a2,2 0 0 1 -2,2 h-42 a2,2 0 0 1 -2,-2 v-28 a2,2 0 0 1 2,-2 z" />
+        <group android:rotation="-15" android:pivotX="49.5" android:pivotY="51">
+            <path android:fillColor="#FFFFFFFF" android:pathData="M41.1,40 h16.8 a1.6,1.6 0 0 1 1.6,1.6 v8.8 a1.6,1.6 0 0 1 -1.6,1.6 h-16.8 a1.6,1.6 0 0 1 -1.6,-1.6 v-8.8 a1.6,1.6 0 0 1 1.6,-1.6 z" />
+            <path android:fillColor="#FFFFFFFF" android:pathData="M48.8,51.5 h1.4 a1.2,1.2 0 0 1 1.2,1.2 v9.6 a1.2,1.2 0 0 1 -1.2,1.2 h-1.4 a1.2,1.2 0 0 1 -1.2,-1.2 v-9.6 a1.2,1.2 0 0 1 1.2,-1.2 z" />
+            <path android:fillColor="#FFFFFFFF" android:pathData="M48,62 h3 a1.4,1.4 0 0 1 1.4,1.4 v0.4 a1.4,1.4 0 0 1 -1.4,1.4 h-3 a1.4,1.4 0 0 1 -1.4,-1.4 v-0.4 a1.4,1.4 0 0 1 1.4,-1.4 z" />
+        </group>
     </group>
 </vector>
