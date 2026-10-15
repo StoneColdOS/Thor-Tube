@@ -17,7 +17,7 @@ android {
         versionCode = build
         // A release tag like v0.1.0 names the release build; everything else is a numbered test build.
         val tag = System.getenv("GITHUB_REF_NAME")?.takeIf { it.matches(Regex("v\\d+\\.\\d+\\.\\d+.*")) }
-        versionName = tag?.removePrefix("v") ?: "0.0.1-dev.$build"
+        versionName = System.getenv("THOR_VERSION") ?: tag?.removePrefix("v") ?: "0.0.1-dev.$build"
     }
 
     signingConfigs {
