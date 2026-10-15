@@ -36,6 +36,35 @@ object YouTubeFeed {
     /** The TV app's home screen is "default". */
     suspend fun home(want: Int = 60): List<Video> = page("default", want = want).videos
 
+    /** The signed-in account's name and profile picture, or null if YouTube won't say. */
+    suspend fun me(): Pair<String, String?>? {
+        val r = call(
+            "account/accounts_list",
+            JSONObject().put("accountReadMask", JSONObject().put("returnOwner", true).put("returnBrandAccounts", true)),
+        ) ?: return null
+        val items = mutableListOf<JSONObject>()
+        fun walk(o: Any?) {
+            when (o) {
+                is JSONObject -> {
+                    o.optJSONObject("accountItem")?.let { items += it }
+                    o.keys().forEach { walk(o.get(it)) }
+                }
+                is org.json.JSONArray -> for (i in 0 until o.length()) walk(o.get(i))
+            }
+        }
+        walk(r)
+        val me = items.firstOrNull { it.optBoolean("isSelected") } ?: items.firstOrNull() ?: return null
+        val name = me.optJSONObject("accountName")?.let { n ->
+            n.optString("simpleText").ifBlank {
+                n.optJSONArray("runs")?.let { runs -> (0 until runs.length()).joinToString("") { runs.getJSONObject(it).optString("text") } }.orEmpty()
+            }
+        }.orEmpty()
+        val thumbs = me.optJSONObject("accountPhoto")?.optJSONArray("thumbnails")
+        val photo = thumbs?.optJSONObject(thumbs.length() - 1)?.optString("url")?.takeIf { it.isNotBlank() }
+            ?.let { if (it.startsWith("//")) "https:$it" else it }
+        return name to photo
+    }
+
     /** Your subscriptions feed, plus the list of channels you're subscribed to. Pass a channel's [YtChannel.params] for just that one. */
     suspend fun subscriptions(params: String? = null, want: Int = 60): YtPage = page("FEsubscriptions", params, want)
 

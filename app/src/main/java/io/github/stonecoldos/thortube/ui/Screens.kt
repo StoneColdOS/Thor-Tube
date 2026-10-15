@@ -89,43 +89,79 @@ import kotlinx.coroutines.delay
 
 /** The slim strip on the left: one button per screen. */
 @Composable
-fun Rail(current: Screen, onPick: (Screen) -> Unit) {
+fun Rail(current: Screen, signedIn: Boolean, me: Pair<String, String?>?, onPick: (Screen) -> Unit) {
     val p = LocalPalette.current
     Column(
         Modifier
-            .width(46.dp)
+            .width(60.dp)
             .fillMaxHeight()
             .background(p.rail)
             .border(width = 0.5.dp, color = p.railLine)
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text("TT", color = p.accent, fontWeight = FontWeight.Black, fontSize = 13.sp, modifier = Modifier.padding(bottom = 10.dp))
-        Screen.entries.forEach { s ->
-            val on = s == current
-            var focused by remember { mutableStateOf(false) }
-            Column(
-                Modifier
-                    .width(40.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (on) p.railOn else Color.Transparent)
-                    .border(2.dp, if (focused) p.accent else Color.Transparent, RoundedCornerShape(10.dp))
-                    .onFocusChanged { focused = it.isFocused }
-                    .clickable { onPick(s) }
-                    .padding(vertical = 7.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                RailIcon(s, if (on) p.accent else p.dim)
-                Text(s.label, color = if (on) p.text else p.dim, fontSize = 7.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
+        Text("TT", color = p.accent, fontWeight = FontWeight.Black, fontSize = 14.sp, modifier = Modifier.padding(bottom = 8.dp))
+        Column(
+            Modifier.weight(1f),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Screen.entries.filter { it != Screen.SETUP }.forEach { s -> RailButton(s, s == current) { onPick(s) } }
+        }
+        Box(Modifier.padding(vertical = 4.dp).width(36.dp).height(0.5.dp).background(p.railLine))
+        RailButton(Screen.SETUP, current == Screen.SETUP) { onPick(Screen.SETUP) }
+        // Your account: profile picture when signed in, a plain person when not. Opens Setup.
+        var focused by remember { mutableStateOf(false) }
+        Box(
+            Modifier
+                .padding(top = 4.dp)
+                .size(34.dp)
+                .clip(CircleShape)
+                .border(2.dp, if (focused) p.accent else Color.Transparent, CircleShape)
+                .onFocusChanged { focused = it.isFocused }
+                .clickable { onPick(Screen.SETUP) }
+                .padding(3.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (signedIn && me != null) {
+                Avatar(me.first.ifBlank { "You" }, me.second, 28.dp)
+            } else {
+                Canvas(Modifier.size(28.dp)) {
+                    val c = if (signedIn) p.accent else p.dim
+                    drawCircle(c, size.width / 2f, style = Stroke(size.width * 0.07f))
+                    drawCircle(c, size.width * 0.17f, Offset(size.width / 2f, size.height * 0.4f))
+                    drawArc(c, 200f, 140f, false, Offset(size.width * 0.22f, size.height * 0.6f),
+                        androidx.compose.ui.geometry.Size(size.width * 0.56f, size.height * 0.5f), style = Stroke(size.width * 0.07f, cap = StrokeCap.Round))
+                }
             }
         }
     }
 }
 
 @Composable
+private fun RailButton(s: Screen, on: Boolean, onClick: () -> Unit) {
+    val p = LocalPalette.current
+    var focused by remember { mutableStateOf(false) }
+    Column(
+        Modifier
+            .width(52.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (on) p.railOn else Color.Transparent)
+            .border(2.dp, if (focused) p.accent else Color.Transparent, RoundedCornerShape(12.dp))
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        RailIcon(s, if (on) p.accent else p.dim)
+        Spacer(Modifier.height(2.dp))
+        Text(s.label, color = if (on) p.text else p.dim, fontSize = 9.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
+    }
+}
+
+@Composable
 private fun RailIcon(s: Screen, color: Color) {
-    Canvas(Modifier.size(16.dp)) {
+    Canvas(Modifier.size(20.dp)) {
         val w = size.width
         val h = size.height
         when (s) {

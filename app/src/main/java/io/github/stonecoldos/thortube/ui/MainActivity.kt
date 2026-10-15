@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -183,7 +184,10 @@ class MainActivity : ComponentActivity() {
                     val shown = playerShown
                     if (!(shown.currentState && shown.targetState) && !commentsPageOpen) {
                         Row(Modifier.fillMaxSize()) {
-                            Rail(screen) { screen = it }
+                            LaunchedEffect(signedIn) {
+                                me = if (signedIn) runCatching { YouTubeFeed.me() }.getOrNull() else null
+                            }
+                            Rail(screen, signedIn, me) { screen = it }
                             Crossfade(screen, Modifier.weight(1f).fillMaxSize(), animationSpec = tween(180), label = "screen") { s ->
                                 Box(Modifier.fillMaxSize()) {
                                     when (s) {
@@ -918,6 +922,8 @@ class MainActivity : ComponentActivity() {
     var signInStatus by mutableStateOf("")
     var signedIn by mutableStateOf(YouTubeAccount.isSignedIn)
         private set
+    /** Signed-in account's name and picture, for the sidebar. */
+    var me by mutableStateOf<Pair<String, String?>?>(null)
     private var signInJob: Job? = null
 
     fun startSignIn() {
