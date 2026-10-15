@@ -17,6 +17,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -159,6 +161,13 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
         delay(3_000)
         if (app.isPlaying && !app.optionsOpen) controls = false
     }
+    var skip by remember { mutableStateOf<Pair<Int, Int>?>(null) }   // side (-1 back, 1 ahead) to seconds
+    LaunchedEffect(skip) {
+        if (skip != null) {
+            delay(750)
+            skip = null
+        }
+    }
     val videoFocus = remember { FocusRequester() }
     LaunchedEffect(np.video.url) { runCatching { videoFocus.requestFocus() } }
 
@@ -204,12 +213,37 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
                         },
                     ) { _, dy -> drag += dy }
                 }
-                .clickable(indication = null, interactionSource = null) {
-                    controls = !controls
-                    lastPoke = System.currentTimeMillis()
+                // Tap: show/hide controls. Double-tap the left or right third: back or forward 10 s,
+                // and each extra tap while the counter shows adds another 10 s (like YouTube).
+                .pointerInput(Unit) {
+                    fun sideOf(x: Float) = when {
+                        x < size.width / 3f -> -1
+                        x > size.width * 2f / 3f -> 1
+                        else -> 0
+                    }
+                    fun skipOn(side: Int) {
+                        app.seekBy(side * 10_000L, showControls = false)
+                        val before = skip?.takeIf { it.first == side }?.second ?: 0
+                        skip = side to before + 10
+                    }
+                    detectTapGestures(
+                        onDoubleTap = { o ->
+                            val side = sideOf(o.x)
+                            if (side != 0) skipOn(side) else app.togglePause()
+                        },
+                        onTap = { o ->
+                            val side = sideOf(o.x)
+                            if (skip != null && side == skip?.first) skipOn(side)
+                            else {
+                                controls = !controls
+                                lastPoke = System.currentTimeMillis()
+                            }
+                        },
+                    )
                 },
         ) {
             VideoSurface(app, Modifier.fillMaxSize())
+            SkipBadge(skip, Modifier.fillMaxSize())
             if (!app.firstFrame && app.crtMode == CrtMode.OFF) Thumb(np.video.bigThumbnail, Modifier.fillMaxSize())
             app.playerProblem?.let {
                 Text(
@@ -453,6 +487,33 @@ private fun RoundButton(label: String, big: Boolean = false, lit: Boolean = fals
         contentAlignment = Alignment.Center,
     ) {
         Text(label, color = Color.White, fontSize = if (big) 15.sp else 10.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+/** The "« 20s" / "20s »" bubble that shows which way a double-tap skipped, and how far. */
+@Composable
+private fun SkipBadge(skip: Pair<Int, Int>?, modifier: Modifier) {
+    var shown by remember { mutableStateOf(1 to 10) }
+    if (skip != null) shown = skip
+    val alpha by animateFloatAsState(if (skip != null) 1f else 0f, tween(if (skip != null) 90 else 250), label = "skip")
+    if (alpha <= 0f) return
+    Box(modifier.graphicsLayer { this.alpha = alpha }) {
+        val back = shown.first < 0
+        Box(
+            Modifier
+                .align(if (back) Alignment.CenterStart else Alignment.CenterEnd)
+                .fillMaxHeight()
+                .fillMaxWidth(0.33f)
+                .background(Color(0x33FFFFFF), if (back) RoundedCornerShape(topEnd = 400.dp, bottomEnd = 400.dp) else RoundedCornerShape(topStart = 400.dp, bottomStart = 400.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                if (back) "«  ${shown.second}s" else "${shown.second}s  »",
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
     }
 }
 

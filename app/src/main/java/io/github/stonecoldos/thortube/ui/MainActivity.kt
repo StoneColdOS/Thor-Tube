@@ -686,11 +686,11 @@ class MainActivity : ComponentActivity() {
         controlsPing++
     }
 
-    fun seekBy(deltaMs: Long) {
+    fun seekBy(deltaMs: Long, showControls: Boolean = true) {
         val d = player.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
         player.seekTo((player.currentPosition + deltaMs).coerceIn(0, d))
         positionMs = player.currentPosition
-        controlsPing++
+        if (showControls) controlsPing++
     }
 
     fun seekTo(ms: Long) {
