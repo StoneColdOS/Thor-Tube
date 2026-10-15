@@ -33,7 +33,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
@@ -51,7 +50,9 @@ import io.github.stonecoldos.thortube.ThorTubeApp
 import io.github.stonecoldos.thortube.data.Comment
 import io.github.stonecoldos.thortube.data.Comments
 import io.github.stonecoldos.thortube.data.Feeds
-import io.github.stonecoldos.thortube.data.HOME_TABS
+import io.github.stonecoldos.thortube.data.FOR_YOU
+import io.github.stonecoldos.thortube.data.STARTER_TOPICS
+import io.github.stonecoldos.thortube.data.Tab
 import io.github.stonecoldos.thortube.data.Video
 import io.github.stonecoldos.thortube.data.ago
 import io.github.stonecoldos.thortube.player.MediaSources
@@ -240,6 +241,7 @@ class MainActivity : ComponentActivity() {
         theme = settings.theme
         crtMode = settings.crt
         quality = settings.quality
+        homeTabs = listOf(FOR_YOU) + settings.homeTabs
         sources = MediaSources(ThorTubeApp.http)
         player = ExoPlayer.Builder(this).build().apply { addListener(listener) }
 
@@ -267,7 +269,6 @@ class MainActivity : ComponentActivity() {
                                         Screen.LIBRARY -> LibraryScreen(this@MainActivity)
                                         Screen.CRT -> CrtScreen(this@MainActivity)
                                         Screen.SETUP -> SetupScreen(this@MainActivity)
-                                        else -> ComingSoon(s)
                                     }
                                 }
                             }
@@ -585,8 +586,78 @@ class MainActivity : ComponentActivity() {
 
     // ---------------------------------------------------------------- home
 
+    /** Home's tabs: For You first, then the ones you added (saved on the Thor). */
+    var homeTabs by mutableStateOf(listOf(FOR_YOU))
+        private set
+    /** Tab chip that has the controller highlight (for Y = edit). */
+    var focusedChip: Int? = null
+    /** Index of the tab whose edit menu is open, or null. */
+    var editingTab by mutableStateOf<Int?>(null)
+    /** The add-a-tab sheet: null = closed, -1 = adding, otherwise renaming that tab. */
+    var tabSheet by mutableStateOf<Int?>(null)
+    var tabSuggestions by mutableStateOf<List<Tab>>(emptyList())
+        private set
+
+    private fun saveTabs(tabs: List<Tab>, select: Int) {
+        homeTabs = listOf(FOR_YOU) + tabs.filter { !it.isForYou }
+        settings.homeTabs = homeTabs.drop(1)
+        feeds.clear()
+        gridStates.clear()
+        tab = select.coerceIn(0, homeTabs.lastIndex)
+        selectTab(tab, refresh = true)
+    }
+
+    fun addTab(t: Tab) {
+        val label = t.label.trim().take(32)
+        if (label.isEmpty()) return
+        val tabs = homeTabs.drop(1).filter { it.query != t.query || it.channel != t.channel }
+        saveTabs(tabs + t.copy(label = label), tabs.size + 1)
+        tabSheet = null
+        say("Added \"$label\"")
+    }
+
+    fun renameTab(i: Int, label: String) {
+        val name = label.trim().take(32)
+        if (i <= 0 || name.isEmpty()) return
+        val tabs = homeTabs.drop(1).toMutableList()
+        tabs[i - 1] = tabs[i - 1].copy(label = name)
+        saveTabs(tabs, i)
+        tabSheet = null
+    }
+
+    fun moveTab(i: Int, dir: Int) {
+        val to = i + dir
+        if (i <= 0 || to <= 0 || to > homeTabs.lastIndex) return
+        val tabs = homeTabs.drop(1).toMutableList()
+        java.util.Collections.swap(tabs, i - 1, to - 1)
+        saveTabs(tabs, to)
+        editingTab = to
+    }
+
+    fun removeTab(i: Int) {
+        if (i <= 0) return
+        val gone = homeTabs[i].label
+        saveTabs(homeTabs.drop(1).filterIndexed { k, _ -> k != i - 1 }, (i - 1).coerceAtLeast(0))
+        editingTab = null
+        say("Removed \"$gone\"")
+    }
+
+    /** Quick picks for a new tab: starter topics, then the channels you subscribe to. */
+    fun loadTabSuggestions() {
+        val have = homeTabs.map { it.query to it.channel }.toSet()
+        tabSuggestions = STARTER_TOPICS.filter { (it.query to it.channel) !in have }
+        if (!signedIn) return
+        lifecycleScope.launch {
+            val subs = runCatching { YouTubeFeed.subscriptions(want = 0).channels }.getOrDefault(emptyList())
+                .map { Tab(it.name, null, "https://www.youtube.com/channel/${it.browseId}") }
+            tabSuggestions = (STARTER_TOPICS + subs)
+                .filter { (it.query to it.channel) !in have }
+                .distinctBy { it.channel ?: it.query }
+        }
+    }
+
     fun selectTab(i: Int, refresh: Boolean = false) {
-        tab = i.coerceIn(0, HOME_TABS.lastIndex)
+        tab = i.coerceIn(0, homeTabs.lastIndex)
         val state = feeds[tab]
         val stale = state == null || System.currentTimeMillis() - state.at > 15 * 60_000L
         if (!refresh && !stale && state?.error == null) return
@@ -594,8 +665,8 @@ class MainActivity : ComponentActivity() {
         val which = tab
         feeds[which] = (state ?: FeedState()).copy(loading = true, error = null)
         lifecycleScope.launch {
-            val t = HOME_TABS[which]
-            val result = runCatching { if (t.isForYou) Feeds.forYou() else Feeds.topic(t.query!!) }
+            val t = homeTabs.getOrNull(which) ?: return@launch
+            val result = runCatching { Feeds.forTab(t, homeTabs) }
             feeds[which] = result.fold(
                 { FeedState(it, at = System.currentTimeMillis()) },
                 {
@@ -1025,7 +1096,7 @@ class MainActivity : ComponentActivity() {
     private fun shoulder(dir: Int) {
         when {
             nowPlaying != null && !minimized -> seekBy(dir * 10_000L)
-            screen == Screen.HOME -> selectTab((tab + dir).mod(HOME_TABS.size))
+            screen == Screen.HOME -> selectTab((tab + dir).mod(homeTabs.size))
         }
     }
 
@@ -1065,7 +1136,11 @@ class MainActivity : ComponentActivity() {
             }
             // Y fills the screen with the video (and back).
             KeyEvent.KEYCODE_BUTTON_Y -> {
-                if (down && event.repeatCount == 0 && nowPlaying != null && !minimized) toggleFullscreen()
+                if (down && event.repeatCount == 0) {
+                    if (nowPlaying != null && !minimized) toggleFullscreen()
+                    // On Home, Y on a highlighted tab opens its edit menu.
+                    else if (screen == Screen.HOME) focusedChip?.takeIf { it > 0 }?.let { editingTab = it }
+                }
                 return true
             }
             // X brings a minimized video back.

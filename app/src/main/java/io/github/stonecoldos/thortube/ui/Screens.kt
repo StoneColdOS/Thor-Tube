@@ -26,6 +26,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -81,7 +82,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.stonecoldos.thortube.BuildConfig
-import io.github.stonecoldos.thortube.data.HOME_TABS
+import io.github.stonecoldos.thortube.data.Tab
 import io.github.stonecoldos.thortube.data.Video
 import io.github.stonecoldos.thortube.data.ago
 import io.github.stonecoldos.thortube.data.formatDuration
@@ -208,6 +209,7 @@ private fun RailIcon(s: Screen, color: Color) {
 @Composable
 fun HomeScreen(app: MainActivity) {
     val p = LocalPalette.current
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         // Tabs.
         val chips = rememberLazyListState()
@@ -217,8 +219,19 @@ fun HomeScreen(app: MainActivity) {
             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            itemsIndexed(HOME_TABS) { i, t ->
-                Chip(t.label, i == app.tab) { app.selectTab(i, refresh = i == app.tab) }
+            itemsIndexed(app.homeTabs) { i, t ->
+                Chip(
+                    t.label,
+                    i == app.tab,
+                    onLongClick = if (i > 0) ({ app.editingTab = i }) else null,
+                    onFocus = { f -> if (f) app.focusedChip = i else if (app.focusedChip == i) app.focusedChip = null },
+                ) { app.selectTab(i, refresh = i == app.tab) }
+            }
+            item {
+                Chip("+ Add", false, outlined = true) {
+                    app.loadTabSuggestions()
+                    app.tabSheet = -1
+                }
             }
         }
         AnimatedContent(
@@ -238,7 +251,7 @@ fun HomeScreen(app: MainActivity) {
                     app = app,
                     videos = st.videos,
                     tab = tab,
-                    header = if (HOME_TABS[tab].isForYou && !app.signedIn) {
+                    header = if (app.homeTabs.getOrNull(tab)?.isForYou == true && !app.signedIn) {
                         { SignInBanner { app.screen = Screen.SETUP } }
                     } else null,
                     onOpen = { v -> app.open(v, st.videos) },
@@ -246,23 +259,166 @@ fun HomeScreen(app: MainActivity) {
             }
         }
     }
+    // Add / rename sheet and the per-tab menu, over the feed.
+    app.tabSheet?.let { TabSheet(app, it) }
+    app.editingTab?.let { TabMenu(app, it) }
+    }
 }
 
 @Composable
-fun Chip(label: String, on: Boolean, onClick: () -> Unit) {
+fun Chip(
+    label: String,
+    on: Boolean,
+    outlined: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
+    onFocus: (Boolean) -> Unit = {},
+    onClick: () -> Unit,
+) {
     val p = LocalPalette.current
     var focused by remember { mutableStateOf(false) }
     Box(
         Modifier
             .clip(RoundedCornerShape(50))
-            .background(if (on) p.chipOn else p.card)
-            .border(2.dp, if (focused) p.accent else Color.Transparent, RoundedCornerShape(50))
-            .onFocusChanged { focused = it.isFocused }
-            .clickable(onClick = onClick)
+            .background(if (on) p.chipOn else if (outlined) Color.Transparent else p.card)
+            .border(
+                if (focused) 2.dp else 1.dp,
+                if (focused) p.accent else if (outlined) p.dim else Color.Transparent,
+                RoundedCornerShape(50),
+            )
+            .onFocusChanged { focused = it.isFocused; onFocus(it.isFocused) }
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
-        Text(label, color = if (on) p.chipOnText else p.text, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = if (on) p.chipOnText else if (outlined) p.accent else p.text, fontSize = 10.sp, fontWeight = FontWeight.Bold)
     }
+}
+
+/** Add a tab (index -1) or rename one: type anything, or pick a suggestion. */
+@Composable
+private fun TabSheet(app: MainActivity, index: Int) {
+    val p = LocalPalette.current
+    val renaming = index > 0
+    BackHandler { app.tabSheet = null }
+    var text by remember(index) { mutableStateOf(if (renaming) app.homeTabs.getOrNull(index)?.label.orEmpty() else "") }
+    val field = remember { FocusRequester() }
+    LaunchedEffect(index) { if (renaming) runCatching { field.requestFocus() } }
+    fun submit() {
+        if (renaming) app.renameTab(index, text) else app.addTab(Tab(text.trim(), text.trim()))
+    }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xA0000000))
+            .clickable(indication = null, interactionSource = null) { app.tabSheet = null },
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier
+                .padding(14.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(p.bg)
+                .border(1.dp, p.railLine, RoundedCornerShape(16.dp))
+                .clickable(indication = null, interactionSource = null) { }
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(if (renaming) "Rename tab" else "Add a tab", color = p.text, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.foundation.text.BasicTextField(
+                    value = text,
+                    onValueChange = { text = it.take(32) },
+                    singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(color = p.text, fontSize = 12.sp),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(p.accent),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { submit() }),
+                    modifier = Modifier
+                        .weight(1f)
+                        .focusRequester(field)
+                        .clip(RoundedCornerShape(50))
+                        .background(p.card)
+                        .padding(horizontal = 14.dp, vertical = 9.dp),
+                    decorationBox = { inner ->
+                        if (text.isEmpty()) Text(if (renaming) "Tab name" else "Topic or search, like \"PS2 lost media\"", color = p.dim, fontSize = 12.sp)
+                        inner()
+                    },
+                )
+                Pill(if (renaming) "Save" else "Add tab", primary = true) { submit() }
+            }
+            if (!renaming) {
+                val (topics, channels) = app.tabSuggestions.partition { it.channel == null }
+                if (topics.isNotEmpty()) SuggestionRow("Quick picks", topics) { app.addTab(it) }
+                if (channels.isNotEmpty()) SuggestionRow("Your subscriptions (newest uploads)", channels) { app.addTab(it) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SuggestionRow(title: String, tabs: List<Tab>, onPick: (Tab) -> Unit) {
+    val p = LocalPalette.current
+    Column {
+        Text(title, color = p.dim, fontSize = 9.sp, modifier = Modifier.padding(bottom = 4.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(tabs.size) { i -> Chip(tabs[i].label, false) { onPick(tabs[i]) } }
+        }
+    }
+}
+
+/** Hold a tab (or highlight it and press Y): rename, move, or remove it. */
+@Composable
+private fun TabMenu(app: MainActivity, index: Int) {
+    val p = LocalPalette.current
+    val t = app.homeTabs.getOrNull(index) ?: return
+    BackHandler { app.editingTab = null }
+    val first = remember { FocusRequester() }
+    LaunchedEffect(index) { runCatching { first.requestFocus() } }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xA0000000))
+            .clickable(indication = null, interactionSource = null) { app.editingTab = null },
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier
+                .width(240.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(p.bg)
+                .border(1.dp, p.railLine, RoundedCornerShape(16.dp))
+                .clickable(indication = null, interactionSource = null) { }
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(t.label, color = p.text, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(if (t.channel != null) "Channel: newest uploads" else "Search: ${t.query}", color = p.dim, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            MenuRow("Rename", Modifier.focusRequester(first)) { app.editingTab = null; app.tabSheet = index }
+            if (index > 1) MenuRow("Move left") { app.moveTab(index, -1) }
+            if (index < app.homeTabs.lastIndex) MenuRow("Move right") { app.moveTab(index, 1) }
+            MenuRow("Remove", danger = true) { app.removeTab(index) }
+        }
+    }
+}
+
+@Composable
+private fun MenuRow(label: String, modifier: Modifier = Modifier, danger: Boolean = false, onClick: () -> Unit) {
+    val p = LocalPalette.current
+    var focused by remember { mutableStateOf(false) }
+    Text(
+        label,
+        color = if (danger) Color(0xFFFF6E6E) else p.text,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(p.card)
+            .border(2.dp, if (focused) p.accent else Color.Transparent, RoundedCornerShape(10.dp))
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+    )
 }
 
 @Composable
@@ -499,21 +655,6 @@ fun Pill(label: String, primary: Boolean = false, modifier: Modifier = Modifier,
     }
 }
 
-@Composable
-fun ComingSoon(s: Screen) {
-    val p = LocalPalette.current
-    val what = when (s) {
-        Screen.SUBS -> "Your subscriptions"
-        Screen.SEARCH -> "Search"
-        Screen.LIBRARY -> "History, Watch Later and playlists"
-        Screen.CRT -> "The retro CRT effect"
-        else -> s.label
-    }
-    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Text(what, color = p.text, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-        Text("Coming in a next step.", color = p.dim, fontSize = 10.sp)
-    }
-}
 
 // ------------------------------------------------------------------ setup
 
@@ -576,6 +717,16 @@ fun SetupScreen(app: MainActivity) {
             }
         }
         item {
+            Section("Controls") {
+                CONTROLS.forEach { (keys, what) ->
+                    Row(Modifier.padding(vertical = 2.dp)) {
+                        Text(keys, color = p.text, fontSize = 9.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(118.dp))
+                        Text(what, color = p.dim, fontSize = 9.5.sp)
+                    }
+                }
+            }
+        }
+        item {
             Section("About") {
                 Text("Thor-Tube ${BuildConfig.VERSION_NAME}. Unofficial; not made by YouTube or AYN.", color = p.dim, fontSize = 9.sp)
                 Spacer(Modifier.height(8.dp))
@@ -600,3 +751,20 @@ private fun Section(title: String, content: @Composable () -> Unit) {
         content()
     }
 }
+
+/** The cheat sheet in Setup: button or gesture, then what it does. */
+private val CONTROLS = listOf(
+    "D-pad / left stick" to "Move the highlight. Hold to repeat.",
+    "A / B" to "Open / back",
+    "L1 / R1" to "Switch tabs. In a video: back / ahead 10 s",
+    "L2 / R2 tap" to "Jump a page up / down",
+    "L2 or R2 + stick" to "In a video: scrub, let go to jump there",
+    "Right stick" to "Scroll smoothly",
+    "Y" to "Video full screen. On a Home tab: edit it",
+    "X / Start" to "Bring back the small video / Setup",
+    "Swipe the sidebar" to "Down: to the bottom screen. Up: to the top",
+    "Double-tap video sides" to "Back / ahead 10 s (keep tapping for more)",
+    "Swipe up on video" to "Full screen (top screen: Up next & comments)",
+    "Swipe down on video" to "Leave full screen, then shrink to the corner",
+    "Hold a Home tab" to "Rename, move or remove it",
+)

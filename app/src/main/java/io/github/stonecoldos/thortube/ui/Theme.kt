@@ -88,6 +88,27 @@ class Settings(context: Context) {
         get() = prefs.getInt("quality", 0)
         set(value) = prefs.edit().putInt("quality", value).apply()
 
+    /** Your Home tabs after For You, in order. */
+    var homeTabs: List<io.github.stonecoldos.thortube.data.Tab>
+        get() = runCatching {
+            val arr = org.json.JSONArray(prefs.getString("homeTabs", null) ?: return emptyList())
+            (0 until arr.length()).map {
+                val o = arr.getJSONObject(it)
+                io.github.stonecoldos.thortube.data.Tab(
+                    o.getString("label"),
+                    o.optString("query").takeIf { q -> q.isNotEmpty() },
+                    o.optString("channel").takeIf { c -> c.isNotEmpty() },
+                )
+            }.filter { !it.isForYou }
+        }.getOrDefault(emptyList())
+        set(value) {
+            val arr = org.json.JSONArray()
+            value.filter { !it.isForYou }.forEach {
+                arr.put(org.json.JSONObject().put("label", it.label).put("query", it.query ?: "").put("channel", it.channel ?: ""))
+            }
+            prefs.edit().putString("homeTabs", arr.toString()).apply()
+        }
+
     /** Caption language last picked, or null for captions off. */
     var captionLang: String?
         get() = prefs.getString("captionLang", null)

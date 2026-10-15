@@ -15,13 +15,18 @@ import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQu
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import org.schabi.newpipe.extractor.stream.StreamType
 
-/** A row of tabs across the top of Home. */
-data class Tab(val label: String, val query: String?) {
-    val isForYou get() = query == null
+/**
+ * A tab across the top of Home. For You is built in; every other tab is one you added:
+ * either a search ([query]) or a channel's newest uploads ([channel] = its page link).
+ */
+data class Tab(val label: String, val query: String?, val channel: String? = null) {
+    val isForYou get() = query == null && channel == null
 }
 
-val HOME_TABS = listOf(
-    Tab("For You", null),
+val FOR_YOU = Tab("For You", null)
+
+/** Quick picks offered when adding a tab (and the mix For You falls back to when signed out). */
+val STARTER_TOPICS = listOf(
     Tab("Gaming", "gaming"),
     Tab("Handhelds", "retro handheld"),
     Tab("Tech", "tech news"),
@@ -35,8 +40,8 @@ object Feeds {
 
     private const val TAG = "ThorTube"
 
-    /** Signed in: your YouTube home. Otherwise a mix of the topic tabs, newest first. */
-    suspend fun forYou(): List<Video> {
+    /** Signed in: your YouTube home. Otherwise a mix of your tabs (or some starter topics), newest first. */
+    suspend fun forYou(tabs: List<Tab> = emptyList()): List<Video> {
         if (YouTubeAccount.isSignedIn) {
             val home = runCatching { YouTubeFeed.home() }
                 .onFailure { AppLog.w(TAG, "YouTube home failed", it) }
@@ -44,11 +49,27 @@ object Feeds {
             if (home.isNotEmpty()) return home
         }
         return coroutineScope {
-            HOME_TABS.mapNotNull { it.query }.map { q -> async { runCatching { search(q) }.getOrDefault(emptyList()).take(8) } }
+            (tabs.mapNotNull { it.query }.ifEmpty { STARTER_TOPICS.mapNotNull { it.query } }).map { q -> async { runCatching { search(q) }.getOrDefault(emptyList()).take(8) } }
                 .awaitAll()
                 .let { lists -> (0 until 8).flatMap { i -> lists.mapNotNull { it.getOrNull(i) } } }
                 .distinctBy { it.url }
         }
+    }
+
+    /** What a tab shows: For You, a channel's newest uploads, or a search (newest first). */
+    suspend fun forTab(tab: Tab, all: List<Tab>): List<Video> = when {
+        tab.isForYou -> forYou(all)
+        tab.channel != null -> channel(tab.channel)
+        else -> topic(tab.query!!)
+    }
+
+    /** A channel's newest uploads. */
+    suspend fun channel(url: String): List<Video> = withContext(Dispatchers.IO) {
+        val service = ServiceList.YouTube
+        val info = org.schabi.newpipe.extractor.channel.ChannelInfo.getInfo(service, url)
+        val videosTab = info.tabs.firstOrNull { org.schabi.newpipe.extractor.channel.tabs.ChannelTabs.VIDEOS in it.contentFilters }
+            ?: return@withContext emptyList()
+        org.schabi.newpipe.extractor.channel.tabs.ChannelTabInfo.getInfo(service, videosTab).relatedItems.videos()
     }
 
     /** A topic tab: what YouTube finds for the search, newest first. */
