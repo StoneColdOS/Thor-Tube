@@ -272,7 +272,7 @@ class MainActivity : ComponentActivity() {
     /** A tube view came up (full player or mini-player): its renderer takes over the picture. */
     fun crtAttached(r: CrtRenderer) {
         crtViews += r
-        r.applyLook(flat = crtMode == CrtMode.NOUGHTIES)
+        r.applyLook(crtMode.look)
         player.videoSize.let { v -> r.setVideoSize(v.width, v.height, v.pixelWidthHeightRatio) }
         r.targetStatic = if (firstFrame) 0f else 1f
     }

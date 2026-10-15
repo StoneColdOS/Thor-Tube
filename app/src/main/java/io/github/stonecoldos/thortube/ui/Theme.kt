@@ -67,7 +67,8 @@ val LocalPalette = staticCompositionLocalOf { DarkPalette }
 enum class CrtMode(val label: String, val blurb: String) {
     OFF("Off", "Plain, sharp video."),
     NINETIES("90s tube", "A curved tube with heavy scanlines and glowing phosphor stripes."),
-    NOUGHTIES("2000s flat", "A flat late-2000s HD tube: faint lines, punchier picture."),
+    NOUGHTIES("2000s flat", "A flat 2000s set: sharp and bright edge to edge, faint lines, punchy color."),
+    JUNK("Garage set", "A worn-out black and white TV. Fuzzy, ghosty, and it shakes now and then."),
 }
 
 /** Saved choices. */
@@ -82,3 +83,11 @@ class Settings(context: Context) {
         get() = runCatching { CrtMode.valueOf(prefs.getString("crt", null) ?: "") }.getOrDefault(CrtMode.OFF)
         set(value) = prefs.edit().putString("crt", value.name).apply()
 }
+
+/** Which shader settings a tube style uses. OFF never reaches the renderer. */
+val CrtMode.look: io.github.stonecoldos.thortube.crt.CrtRenderer.Look
+    get() = when (this) {
+        CrtMode.NOUGHTIES -> io.github.stonecoldos.thortube.crt.CrtRenderer.Look.NOUGHTIES
+        CrtMode.JUNK -> io.github.stonecoldos.thortube.crt.CrtRenderer.Look.JUNK
+        else -> io.github.stonecoldos.thortube.crt.CrtRenderer.Look.NINETIES
+    }

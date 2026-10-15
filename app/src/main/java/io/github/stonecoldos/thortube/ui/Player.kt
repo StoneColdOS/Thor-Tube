@@ -105,7 +105,7 @@ private fun TubeSurface(app: MainActivity, modifier: Modifier) {
                 app.crtAttached(r)
             }
         },
-        update = { (it.tag as CrtRenderer).applyLook(flat = app.crtMode == CrtMode.NOUGHTIES) },
+        update = { (it.tag as CrtRenderer).applyLook(app.crtMode.look) },
         onRelease = { gl ->
             val r = gl.tag as CrtRenderer
             app.crtDetached(r)

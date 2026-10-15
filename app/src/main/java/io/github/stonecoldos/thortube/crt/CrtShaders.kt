@@ -35,6 +35,14 @@ uniform float uCurve;        // glass bulge: 1 = normal, lower = flatter
 uniform float uScan;         // scanline strength
 uniform float uSoft;         // extra beam blur (cheap sets)
 uniform float uGrain;        // constant faint picture noise (cheap sets)
+uniform float uMask;         // how dark the gaps between phosphor stripes are
+uniform float uGlow;         // bloom around bright parts
+uniform float uVig;          // how much the corners darken
+uniform float uBoost;        // brightness make-up for lines and mask
+uniform float uConv;         // red/blue convergence error
+uniform float uSat;          // color saturation
+uniform float uMono;         // 1 = black and white set
+uniform float uJunk;         // 1 = worn-out set: ghosting, rolling bar, wobble, washed out
 
 varying vec2 vUv;
 
@@ -84,35 +92,65 @@ void main() {
     float row = floor(gl_FragCoord.y / 3.0);
     uv.x += (hash(vec2(row, floor(uTime * 30.0))) - 0.5) * 0.02 * uStatic;
 
+    // A worn-out set: the picture sways a little, and every so often it shakes.
+    float burst = step(0.9, hash(vec2(floor(uTime * 1.5), 3.1)));
+    uv.x += sin(uv.y * 6.0 + uTime * 1.3) * 0.0015 * uJunk;
+    uv.x += sin(uv.y * 40.0 + uTime * 25.0) * 0.006 * burst * uJunk;
+
     vec3 col;
     if (uCrt > 0.5) {
         float px = 1.0 / uRes.x;
+        float py = 1.0 / uRes.y;
         // Soft horizontal beam plus a slight red/blue convergence error.
         vec3 c = video(uv);
-        float spread = 1.5 + uSoft * 1.5;
+        float spread = max(0.5, 1.5 + uSoft * 1.5);
         vec3 l = video(uv - vec2(px * spread, 0.0));
         vec3 r = video(uv + vec2(px * spread, 0.0));
         col = c * 0.6 + (l + r) * 0.2;
-        col.r = mix(col.r, r.r, 0.35);
-        col.b = mix(col.b, l.b, 0.35);
+        col.r = mix(col.r, r.r, uConv);
+        col.b = mix(col.b, l.b, uConv);
+
+        if (uJunk > 0.0) {
+            // Smear up and down too, and a ghost of the picture off to the right (bad antenna).
+            vec3 v = (video(uv + vec2(0.0, py * 2.5)) + video(uv - vec2(0.0, py * 2.5))) * 0.5;
+            col = mix(col, v, 0.35 * uJunk);
+            col += video(uv - vec2(0.014, 0.0)) * 0.22 * uJunk;
+            col /= 1.0 + 0.22 * uJunk;
+        }
+
+        // Color: saturation, or black and white with the bluish cast of an old set.
+        float lum = dot(col, vec3(0.299, 0.587, 0.114));
+        col = max(mix(vec3(lum), col, uSat), 0.0);
+        col = mix(col, lum * vec3(0.9, 0.97, 1.08), uMono);
 
         // Scanlines: one bright line every 4 screen pixels.
         float scan = 0.5 + 0.5 * cos(gl_FragCoord.y * 1.5708);
         col *= mix(1.0 - 0.38 * uScan, 1.0, scan);
 
-        // Aperture grille: alternating R, G, B phosphor columns.
+        // Aperture grille: alternating R, G, B phosphor columns (gray on a black and white set).
         float m = mod(floor(gl_FragCoord.x), 3.0);
-        vec3 mask = vec3(0.82);
+        vec3 mask = vec3(1.0 - uMask);
         if (m < 1.0) mask.r = 1.0; else if (m < 2.0) mask.g = 1.0; else mask.b = 1.0;
+        mask = mix(mask, vec3(dot(mask, vec3(0.333))), uMono);
         col *= mask;
 
         // Make up for the light lost to lines and mask, then a little glow.
-        col *= 1.45;
-        col += pow(c, vec3(2.0)) * 0.18;
+        col *= uBoost;
+        vec3 glow = pow(c, vec3(2.0));
+        glow = mix(glow, vec3(dot(glow, vec3(0.299, 0.587, 0.114))), uMono);
+        col += glow * uGlow;
+
+        if (uJunk > 0.0) {
+            // Washed-out blacks, a dark bar slowly rolling up, and an uneven flicker.
+            col = mix(vec3(0.07), col, 1.0 - 0.22 * uJunk);
+            float y = fract(uv.y + uTime * 0.05) - 0.5;
+            col *= 1.0 - 0.22 * exp(-y * y * 60.0) * uJunk;
+            col *= 1.0 - 0.07 * hash(vec2(floor(uTime * 12.0), 7.0)) * uJunk;
+        }
 
         // Darker toward the edges of the tube, and a faint 60 Hz shimmer.
         float vig = 16.0 * uv.x * uv.y * (1.0 - uv.x) * (1.0 - uv.y);
-        col *= pow(vig, 0.22);
+        col *= pow(vig, uVig);
         col *= 0.985 + 0.015 * sin(uTime * 377.0);
         col += (hash(floor(gl_FragCoord.xy / 2.0) + floor(uTime * 30.0) * 0.71) - 0.5) * 0.07 * uGrain;
 

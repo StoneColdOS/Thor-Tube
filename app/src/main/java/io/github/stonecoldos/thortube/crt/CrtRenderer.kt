@@ -32,6 +32,14 @@ class CrtRenderer(
     @Volatile var scan = 1f
     @Volatile var soft = 0f
     @Volatile var grain = 0f
+    @Volatile var mask = 0.18f
+    @Volatile var glow = 0.18f
+    @Volatile var vignette = 0.22f
+    @Volatile var boost = 1.45f
+    @Volatile var convergence = 0.35f
+    @Volatile var saturation = 1f
+    @Volatile var mono = 0f
+    @Volatile var junk = 0f
     @Volatile var targetStatic = 1f   // starts snowy until the first picture arrives
     @Volatile private var videoAspect = 0f
 
@@ -60,6 +68,14 @@ class CrtRenderer(
     private var uScan = 0
     private var uSoft = 0
     private var uGrain = 0
+    private var uMask = 0
+    private var uGlow = 0
+    private var uVig = 0
+    private var uBoost = 0
+    private var uConv = 0
+    private var uSat = 0
+    private var uMono = 0
+    private var uJunk = 0
 
     private val quad = ByteBuffer.allocateDirect(8 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
         .apply { put(floatArrayOf(-1f, -1f, 1f, -1f, -1f, 1f, 1f, 1f)); position(0) }
@@ -87,6 +103,14 @@ class CrtRenderer(
         uScan = GLES20.glGetUniformLocation(program, "uScan")
         uSoft = GLES20.glGetUniformLocation(program, "uSoft")
         uGrain = GLES20.glGetUniformLocation(program, "uGrain")
+        uMask = GLES20.glGetUniformLocation(program, "uMask")
+        uGlow = GLES20.glGetUniformLocation(program, "uGlow")
+        uVig = GLES20.glGetUniformLocation(program, "uVig")
+        uBoost = GLES20.glGetUniformLocation(program, "uBoost")
+        uConv = GLES20.glGetUniformLocation(program, "uConv")
+        uSat = GLES20.glGetUniformLocation(program, "uSat")
+        uMono = GLES20.glGetUniformLocation(program, "uMono")
+        uJunk = GLES20.glGetUniformLocation(program, "uJunk")
 
         val ids = IntArray(1)
         GLES20.glGenTextures(1, ids, 0)
@@ -149,14 +173,22 @@ class CrtRenderer(
         GLES20.glUniform1f(uScan, scan)
         GLES20.glUniform1f(uSoft, soft)
         GLES20.glUniform1f(uGrain, grain)
+        GLES20.glUniform1f(uMask, mask)
+        GLES20.glUniform1f(uGlow, glow)
+        GLES20.glUniform1f(uVig, vignette)
+        GLES20.glUniform1f(uBoost, boost)
+        GLES20.glUniform1f(uConv, convergence)
+        GLES20.glUniform1f(uSat, saturation)
+        GLES20.glUniform1f(uMono, mono)
+        GLES20.glUniform1f(uJunk, junk)
 
         GLES20.glEnableVertexAttribArray(aPos)
         GLES20.glVertexAttribPointer(aPos, 2, GLES20.GL_FLOAT, false, 0, quad)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
         GLES20.glDisableVertexAttribArray(aPos)
 
-        // Keep drawing while there's static to animate; otherwise wait for the next video frame.
-        if (staticLevel > 0f) view.requestRender()
+        // Keep drawing while there's static or a worn-out set to animate; otherwise wait for the next video frame.
+        if (staticLevel > 0f || junk > 0f) view.requestRender()
     }
 
     override fun onFrameAvailable(st: SurfaceTexture?) = view.requestRender()
@@ -164,14 +196,32 @@ class CrtRenderer(
     /** The surface the player draws into, once the GL side has made it. */
     val playerSurface: Surface? get() = surface
 
-    /** The two looks: a curved 90s tube, or a flat late-2000s HD tube with faint lines. */
-    fun applyLook(flat: Boolean) {
+    /** The tube styles the app offers. */
+    enum class Look { NINETIES, NOUGHTIES, JUNK }
+
+    fun applyLook(look: Look) {
         crtEnabled = true
-        curve = if (flat) 0f else 1f
-        scan = if (flat) 0.35f else 1f
-        soft = 0f
-        grain = 0f
+        when (look) {
+            // Curved 90s tube: heavy lines, visible phosphor stripes, glow, dark corners.
+            Look.NINETIES -> set(curve = 1f, scan = 1f, soft = 0f, grain = 0f, mask = 0.18f, glow = 0.18f,
+                vignette = 0.22f, boost = 1.45f, convergence = 0.35f, saturation = 1f, mono = 0f, junk = 0f)
+            // Flat 2000s set (think Sony Wega): sharp, bright edge to edge, faint lines, punchy color.
+            Look.NOUGHTIES -> set(curve = 0f, scan = 0.22f, soft = -0.5f, grain = 0f, mask = 0.07f, glow = 0.05f,
+                vignette = 0.05f, boost = 1.12f, convergence = 0.08f, saturation = 1.18f, mono = 0f, junk = 0f)
+            // A black and white set that's been in the garage for 30 years.
+            Look.JUNK -> set(curve = 1.25f, scan = 0.8f, soft = 1.8f, grain = 2.2f, mask = 0.1f, glow = 0.28f,
+                vignette = 0.45f, boost = 1.3f, convergence = 0.35f, saturation = 1f, mono = 1f, junk = 1f)
+        }
         view.requestRender()
+    }
+
+    private fun set(
+        curve: Float, scan: Float, soft: Float, grain: Float, mask: Float, glow: Float, vignette: Float,
+        boost: Float, convergence: Float, saturation: Float, mono: Float, junk: Float,
+    ) {
+        this.curve = curve; this.scan = scan; this.soft = soft; this.grain = grain; this.mask = mask
+        this.glow = glow; this.vignette = vignette; this.boost = boost; this.convergence = convergence
+        this.saturation = saturation; this.mono = mono; this.junk = junk
     }
 
     fun release() {
