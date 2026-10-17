@@ -153,7 +153,7 @@ private fun RailButton(label: String, on: Boolean, onClick: () -> Unit, focus: F
     ) {
         icon(if (on) p.accent else p.dim)
         Spacer(Modifier.height(2.dp))
-        Text(label, color = if (on) p.text else p.dim, fontSize = 10.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
+        Text(label, color = if (on) p.text else p.dim, fontSize = 11.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
     }
 }
 
@@ -223,7 +223,7 @@ fun HomeScreen(app: MainActivity) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text("Thor-Tube v${u.version} is out", color = p.text, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text("Thor-Tube v${u.version} is out", color = p.text, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 Pill("Download", primary = true) { app.openUpdate() }
                 Pill("Later") { app.updateLater() }
             }
@@ -306,7 +306,7 @@ fun Chip(
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
-        Text(label, color = if (on) p.chipOnText else if (outlined) p.accent else p.text, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = if (on) p.chipOnText else if (outlined) p.accent else p.text, fontSize = 11.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -346,7 +346,7 @@ private fun TabSheet(app: MainActivity, index: Int) {
                     value = text,
                     onValueChange = { text = it.take(32) },
                     singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(color = p.text, fontSize = 12.sp),
+                    textStyle = androidx.compose.ui.text.TextStyle(color = p.text, fontSize = 12.5.sp),
                     cursorBrush = androidx.compose.ui.graphics.SolidColor(p.accent),
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
                     keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { submit() }),
@@ -357,7 +357,7 @@ private fun TabSheet(app: MainActivity, index: Int) {
                         .background(p.card)
                         .padding(horizontal = 14.dp, vertical = 9.dp),
                     decorationBox = { inner ->
-                        if (text.isEmpty()) Text(if (renaming) "Tab name" else "Topic or search, like \"PS2 lost media\"", color = p.dim, fontSize = 12.sp)
+                        if (text.isEmpty()) Text(if (renaming) "Tab name" else "Topic or search, like \"PS2 lost media\"", color = p.dim, fontSize = 12.5.sp)
                         inner()
                     },
                 )
@@ -376,7 +376,7 @@ private fun TabSheet(app: MainActivity, index: Int) {
 private fun SuggestionRow(title: String, tabs: List<Tab>, onPick: (Tab) -> Unit) {
     val p = LocalPalette.current
     Column {
-        Text(title, color = p.dim, fontSize = 9.sp, modifier = Modifier.padding(bottom = 4.dp))
+        Text(title, color = p.dim, fontSize = 9.5.sp, modifier = Modifier.padding(bottom = 4.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(tabs.size) { i -> Chip(tabs[i].label, false) { onPick(tabs[i]) } }
         }
@@ -409,7 +409,7 @@ private fun TabMenu(app: MainActivity, index: Int) {
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(t.label, color = p.text, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(if (t.channel != null) "Channel: newest uploads" else "Search: ${t.query}", color = p.dim, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(if (t.channel != null) "Channel: newest uploads" else "Search: ${t.query}", color = p.dim, fontSize = 9.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             MenuRow("Rename", Modifier.focusRequester(first)) { app.editingTab = null; app.tabSheet = index }
             if (index > 1) MenuRow("Move left") { app.moveTab(index, -1) }
             if (index < app.homeTabs.lastIndex) MenuRow("Move right") { app.moveTab(index, 1) }
@@ -425,7 +425,7 @@ private fun MenuRow(label: String, modifier: Modifier = Modifier, danger: Boolea
     Text(
         label,
         color = if (danger) Color(0xFFFF6E6E) else p.text,
-        fontSize = 11.sp,
+        fontSize = 12.sp,
         fontWeight = FontWeight.Bold,
         modifier = modifier
             .fillMaxWidth()
@@ -451,10 +451,10 @@ private fun SignInBanner(onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text("Make this your YouTube home", color = p.text, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-            Text("Sign in and For You shows what YouTube picks for you.", color = p.dim, fontSize = 9.sp)
+            Text("Make this your YouTube home", color = p.text, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Text("Sign in and For You shows what YouTube picks for you.", color = p.dim, fontSize = 9.5.sp)
         }
-        Text("Sign in", color = p.accent, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+        Text("Sign in", color = p.accent, fontWeight = FontWeight.Bold, fontSize = 11.sp)
     }
 }
 
@@ -613,7 +613,7 @@ fun VideoCard(
                 Text(
                     d,
                     color = Color.White,
-                    fontSize = 8.sp,
+                    fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
@@ -627,9 +627,9 @@ fun VideoCard(
             Avatar(v.uploaderName, null, 16.dp)
             Spacer(Modifier.width(5.dp))
             Column {
-                Text(v.title, color = p.text, fontSize = 9.5.sp, lineHeight = 11.sp, fontWeight = FontWeight.Bold, maxLines = titleLines, overflow = TextOverflow.Ellipsis)
+                Text(v.title, color = p.text, fontSize = 10.5.sp, lineHeight = 12.5.sp, fontWeight = FontWeight.Bold, maxLines = titleLines, overflow = TextOverflow.Ellipsis)
                 val meta = listOf(v.uploaderName, if (v.uploadedAt > 0) ago(v.uploadedAt) else v.uploaded).filter { it.isNotBlank() }.joinToString(" · ")
-                if (meta.isNotEmpty()) Text(meta, color = p.dim, fontSize = 8.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (meta.isNotEmpty()) Text(meta, color = p.dim, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -654,7 +654,7 @@ fun Avatar(name: String, url: String?, size: androidx.compose.ui.unit.Dp) {
 fun Message(text: String, action: String? = null, onAction: () -> Unit = {}) {
     val p = LocalPalette.current
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Text(text, color = p.dim, fontSize = 11.sp)
+        Text(text, color = p.dim, fontSize = 12.sp)
         if (action != null) {
             Spacer(Modifier.height(10.dp))
             Pill(action, primary = true, onClick = onAction)
@@ -675,7 +675,7 @@ fun Pill(label: String, primary: Boolean = false, modifier: Modifier = Modifier,
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 7.dp),
     ) {
-        Text(label, color = if (primary) Color.Black else p.text, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = if (primary) Color.Black else p.text, fontSize = 11.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -705,18 +705,18 @@ fun SetupScreen(app: MainActivity) {
                 val code = app.signInCode
                 when {
                     app.signedIn -> {
-                        Text("Signed in. For You shows your YouTube home, and what you watch here goes into your YouTube history.", color = p.dim, fontSize = 9.5.sp)
+                        Text("Signed in. For You shows your YouTube home, and what you watch here goes into your YouTube history.", color = p.dim, fontSize = 10.5.sp)
                         Spacer(Modifier.height(8.dp))
                         Pill(if (confirmSignOut) "Tap again to sign out" else "Sign out") {
                             if (confirmSignOut) { app.signOut(); confirmSignOut = false } else confirmSignOut = true
                         }
                     }
                     code != null -> {
-                        Text("On your phone or computer, go to", color = p.dim, fontSize = 10.sp)
-                        Text(code.verificationUrl.removePrefix("https://").removePrefix("www."), color = p.text, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        Text("sign in, and enter this code:", color = p.dim, fontSize = 10.sp)
+                        Text("On your phone or computer, go to", color = p.dim, fontSize = 11.sp)
+                        Text(code.verificationUrl.removePrefix("https://").removePrefix("www."), color = p.text, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                        Text("sign in, and enter this code:", color = p.dim, fontSize = 11.sp)
                         Text(code.userCode, color = p.accent, fontSize = 26.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(vertical = 6.dp))
-                        Text(app.signInStatus, color = p.dim, fontSize = 9.sp)
+                        Text(app.signInStatus, color = p.dim, fontSize = 9.5.sp)
                         Spacer(Modifier.height(6.dp))
                         Pill("Cancel") { app.cancelSignIn() }
                     }
@@ -725,15 +725,15 @@ fun SetupScreen(app: MainActivity) {
                             "Sign in to see your YouTube home and have what you watch here count in your history. " +
                                 "You enter a code on your phone; your password never touches Thor-Tube.",
                             color = p.dim,
-                            fontSize = 9.5.sp,
+                            fontSize = 10.5.sp,
                         )
                         Text(
                             "Unofficial: this uses the YouTube TV app's sign-in, which is against YouTube's terms. A spare account is safest.",
                             color = p.dim,
-                            fontSize = 8.5.sp,
+                            fontSize = 9.5.sp,
                             modifier = Modifier.padding(top = 4.dp),
                         )
-                        if (app.signInStatus.isNotEmpty()) Text(app.signInStatus, color = p.text, fontSize = 9.sp, modifier = Modifier.padding(top = 4.dp))
+                        if (app.signInStatus.isNotEmpty()) Text(app.signInStatus, color = p.text, fontSize = 9.5.sp, modifier = Modifier.padding(top = 4.dp))
                         Spacer(Modifier.height(8.dp))
                         Pill("Sign in", primary = true) { app.startSignIn() }
                     }
@@ -741,26 +741,39 @@ fun SetupScreen(app: MainActivity) {
             }
         }
         item {
+            Section("Playback") {
+                Text("Keep playing with the screen off", color = p.text, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "Sound keeps going when the screen is off or you leave the app, with play, pause and next in the notification shade. Only the sound streams, to save data and battery.",
+                    color = p.dim, fontSize = 9.5.sp, modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Chip("Off", !app.backgroundPlay) { app.chooseBackgroundPlay(false) }
+                    Chip("On", app.backgroundPlay) { app.chooseBackgroundPlay(true) }
+                }
+            }
+        }
+        item {
             Section("Controls") {
                 CONTROLS.forEach { (keys, what) ->
                     Row(Modifier.padding(vertical = 2.dp)) {
-                        Text(keys, color = p.text, fontSize = 9.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(118.dp))
-                        Text(what, color = p.dim, fontSize = 9.5.sp)
+                        Text(keys, color = p.text, fontSize = 10.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(118.dp))
+                        Text(what, color = p.dim, fontSize = 10.5.sp)
                     }
                 }
             }
         }
         item {
             Section("About") {
-                Text("Thor-Tube ${BuildConfig.VERSION_NAME}. Unofficial; not made by YouTube or AYN.", color = p.dim, fontSize = 9.sp)
-                Text(app.updateStatus, color = if (app.update != null) p.accent else p.dim, fontSize = 9.sp, fontWeight = if (app.update != null) FontWeight.Bold else FontWeight.Normal)
+                Text("Thor-Tube ${BuildConfig.VERSION_NAME}. Unofficial; not made by YouTube or AYN.", color = p.dim, fontSize = 9.5.sp)
+                Text(app.updateStatus, color = if (app.update != null) p.accent else p.dim, fontSize = 9.5.sp, fontWeight = if (app.update != null) FontWeight.Bold else FontWeight.Normal)
                 if (app.update != null) {
                     Spacer(Modifier.height(6.dp))
                     Pill("Get v${app.update?.version}", primary = true) { app.openUpdate() }
                 }
                 Spacer(Modifier.height(8.dp))
                 Pill("Share logs") { app.shareLogs() }
-                Text("Sends this app's logs (no video links, searches or account details) through Android's share menu.", color = p.dim, fontSize = 9.sp, modifier = Modifier.padding(top = 4.dp))
+                Text("Sends this app's logs (no video links, searches or account details) through Android's share menu.", color = p.dim, fontSize = 9.5.sp, modifier = Modifier.padding(top = 4.dp))
             }
         }
     }
@@ -776,7 +789,7 @@ private fun Section(title: String, content: @Composable () -> Unit) {
             .background(p.card.copy(alpha = if (p.isLight) 0.6f else 0.5f))
             .padding(12.dp),
     ) {
-        Text(title, color = p.text, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+        Text(title, color = p.text, fontSize = 12.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
         content()
     }
 }

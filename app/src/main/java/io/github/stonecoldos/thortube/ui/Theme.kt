@@ -88,6 +88,11 @@ class Settings(context: Context) {
         get() = prefs.getInt("quality", 0)
         set(value) = prefs.edit().putInt("quality", value).apply()
 
+    /** Keep playing audio with the screen off (Setup > Playback). Off unless you turn it on. */
+    var backgroundPlay: Boolean
+        get() = prefs.getBoolean("backgroundPlay", false)
+        set(value) = prefs.edit().putBoolean("backgroundPlay", value).apply()
+
     /** Your Home tabs after For You, in order. */
     var homeTabs: List<io.github.stonecoldos.thortube.data.Tab>
         get() = runCatching {

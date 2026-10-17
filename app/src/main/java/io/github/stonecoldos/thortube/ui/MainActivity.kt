@@ -291,6 +291,8 @@ class MainActivity : ComponentActivity() {
         homeTabs = listOf(FOR_YOU) + settings.homeTabs
         sources = MediaSources(ThorTubeApp.http)
         player = ExoPlayer.Builder(this).build().apply { addListener(listener) }
+        backgroundPlay = settings.backgroundPlay
+        if (backgroundPlay) connectPlayback()
 
         setContent {
             val palette = paletteFor(theme, isSystemInDarkTheme())
@@ -359,12 +361,68 @@ class MainActivity : ComponentActivity() {
         handleLink(intent)
     }
 
+    // ---------------------------------------------------------------- screen-off audio
+
+    var backgroundPlay by mutableStateOf(false)
+        private set
+    private var controllerFuture: com.google.common.util.concurrent.ListenableFuture<androidx.media3.session.MediaController>? = null
+
+    fun chooseBackgroundPlay(on: Boolean) {
+        backgroundPlay = on
+        settings.backgroundPlay = on
+        if (on) connectPlayback() else disconnectPlayback()
+        say(if (on) "Audio keeps playing with the screen off" else "Screen-off audio is off")
+    }
+
+    /** Connecting a controller starts the media service, which handles the notification itself. */
+    private fun connectPlayback() {
+        if (controllerFuture != null) return
+        io.github.stonecoldos.thortube.player.BackgroundPlayback.player = player
+        io.github.stonecoldos.thortube.player.BackgroundPlayback.onNext = {
+            runOnUiThread { nowPlaying?.let { np -> np.upNext.firstOrNull()?.let { open(it, np.upNext, stayMinimized = true) } } }
+        }
+        val token = androidx.media3.session.SessionToken(this, android.content.ComponentName(this, io.github.stonecoldos.thortube.player.PlaybackService::class.java))
+        controllerFuture = androidx.media3.session.MediaController.Builder(this, token).buildAsync()
+    }
+
+    private fun disconnectPlayback() {
+        controllerFuture?.let { androidx.media3.session.MediaController.releaseFuture(it) }
+        controllerFuture = null
+        stopService(Intent(this, io.github.stonecoldos.thortube.player.PlaybackService::class.java))
+    }
+
+    /** What the notification shows. */
+    private fun updatePlaybackInfo(np: NowPlaying) {
+        io.github.stonecoldos.thortube.player.BackgroundPlayback.metadata = androidx.media3.common.MediaMetadata.Builder()
+            .setTitle(np.title)
+            .setArtist(np.channel)
+            .setArtworkUri(android.net.Uri.parse(np.video.bigThumbnail))
+            .build()
+    }
+
+    /** With the screen off, stop fetching the picture and just stream the sound. */
+    private fun videoTrack(enabled: Boolean) {
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(androidx.media3.common.C.TRACK_TYPE_VIDEO, !enabled)
+            .build()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (backgroundPlay && player.playWhenReady && !moving) videoTrack(false)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        videoTrack(true)
+    }
+
     override fun onPause() {
         nowPlaying?.let {
             YouTubeHistory.flush(it.video.url, player.currentPosition / 1000f)
             Resume.remember(it.video.id, player.currentPosition, durationMs)
         }
-        if (!moving) player.pause()
+        if (!moving && !backgroundPlay) player.pause()
         super.onPause()
     }
 
@@ -464,6 +522,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        disconnectPlayback()
+        io.github.stonecoldos.thortube.player.BackgroundPlayback.player = null
         player.release()
         super.onDestroy()
     }
@@ -959,6 +1019,7 @@ class MainActivity : ComponentActivity() {
                 ).joinToString("  ·  "),
             )
             if (nowPlaying != null) lastPlaying = nowPlaying
+            nowPlaying?.let { updatePlaybackInfo(it) }
             loadVideoState(video, info.uploaderUrl)
             currentInfo = info
             qualities = PlaybackPlanner.heights(info)

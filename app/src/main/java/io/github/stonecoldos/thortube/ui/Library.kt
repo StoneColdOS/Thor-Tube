@@ -110,7 +110,7 @@ private fun ChannelBubble(name: String, avatar: String?, on: Boolean, onClick: (
         ) {
             if (avatar == null) {
                 Box(Modifier.fillMaxSize().clip(CircleShape).background(p.card), contentAlignment = Alignment.Center) {
-                    Text("All", color = p.text, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Text("All", color = p.text, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
                 }
             } else {
                 Avatar(name, avatar, 32.dp)
@@ -119,7 +119,7 @@ private fun ChannelBubble(name: String, avatar: String?, on: Boolean, onClick: (
         Text(
             name,
             color = if (on) p.text else p.dim,
-            fontSize = 7.sp,
+            fontSize = 9.sp,
             fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -149,7 +149,7 @@ fun LibraryScreen(app: MainActivity) {
         ) {
             if (open != null) {
                 Pill("‹ Back") { app.closePlaylist() }
-                Text(open.title, color = LocalPalette.current.text, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(open.title, color = LocalPalette.current.text, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             } else {
                 LibTab.entries.forEach { t ->
                     Chip(t.label, t == app.libTab) {
@@ -216,14 +216,14 @@ private fun PlaylistGrid(items: List<YtPlaylist>, onOpen: (YtPlaylist) -> Unit) 
                     Text(
                         "≡ Playlist",
                         color = Color.White,
-                        fontSize = 8.sp,
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp)
                             .background(Color(0xD0000000), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 1.dp),
                     )
                 }
-                Text(pl.title, color = p.text, fontSize = 9.5.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 5.dp))
-                if (pl.subtitle.isNotEmpty()) Text(pl.subtitle, color = p.dim, fontSize = 8.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(pl.title, color = p.text, fontSize = 10.5.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 5.dp))
+                if (pl.subtitle.isNotEmpty()) Text(pl.subtitle, color = p.dim, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -242,7 +242,7 @@ fun CrtScreen(app: MainActivity) {
     BackHandler { app.screen = Screen.HOME }
     Column(Modifier.fillMaxSize().padding(14.dp)) {
         Text("CRT effect", color = p.text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        Text("Makes videos look like they're on an old TV. Works in the player and the mini-player.", color = p.dim, fontSize = 9.5.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
+        Text("Makes videos look like they're on an old TV. Works in the player and the mini-player.", color = p.dim, fontSize = 10.5.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
         CrtMode.entries.forEach { m ->
             val on = m == app.crtMode
             var focused by remember { mutableStateOf(false) }
@@ -264,13 +264,13 @@ fun CrtScreen(app: MainActivity) {
                     if (on) Box(Modifier.fillMaxSize().clip(CircleShape).background(p.accent))
                 }
                 Column(Modifier.padding(start = 10.dp)) {
-                    Text(m.label, color = p.text, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    Text(m.blurb, color = p.dim, fontSize = 9.sp)
+                    Text(m.label, color = p.text, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(m.blurb, color = p.dim, fontSize = 9.5.sp)
                 }
             }
         }
         if (app.nowPlaying != null) {
-            Text("Your video in the corner shows the effect live.", color = p.dim, fontSize = 9.sp, modifier = Modifier.padding(top = 4.dp))
+            Text("Your video in the corner shows the effect live.", color = p.dim, fontSize = 9.5.sp, modifier = Modifier.padding(top = 4.dp))
         }
     }
 }
@@ -309,7 +309,7 @@ private fun ChannelHeader(app: MainActivity, ui: ChannelUi, d: io.github.stoneco
             Column(Modifier.weight(1f)) {
                 Text(d.name, color = p.text, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val subs = if (d.subscribers > 0) "${shortCount(d.subscribers)} subscribers" else ""
-                Text(listOf(subs, "${d.videos.size} recent videos").filter { it.isNotBlank() }.joinToString("  ·  "), color = p.dim, fontSize = 9.5.sp)
+                Text(listOf(subs, "${d.videos.size} recent videos").filter { it.isNotBlank() }.joinToString("  ·  "), color = p.dim, fontSize = 10.5.sp)
             }
         }
         Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -319,7 +319,7 @@ private fun ChannelHeader(app: MainActivity, ui: ChannelUi, d: io.github.stoneco
             val pinned = app.homeTabs.any { it.channel == d.url }
             Pill(if (pinned) "✓ On Home" else "+ Add to Home") { if (!pinned) app.addChannelTab() }
         }
-        if (d.videos.isEmpty()) Text("No videos yet.", color = p.dim, fontSize = 10.sp, modifier = Modifier.padding(top = 14.dp))
+        if (d.videos.isEmpty()) Text("No videos yet.", color = p.dim, fontSize = 11.sp, modifier = Modifier.padding(top = 14.dp))
     }
 }
 

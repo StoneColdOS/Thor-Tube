@@ -295,7 +295,7 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(it, color = Color.White, fontSize = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Text(it, color = Color.White, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     if (app.problemNeedsUpdate) Pill("Check for an update", primary = true) { app.openReleases() }
                 }
             }
@@ -368,7 +368,7 @@ private fun androidx.compose.foundation.layout.ColumnScope.PlayerDetails(app: Ma
     run {
         AnimatedVisibility(showInfo, enter = expandVertically(tween(200)) + fadeIn(tween(200)), exit = shrinkVertically(tween(200)) + fadeOut(tween(150))) {
             Column(Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 6.dp)) {
-                Text(np.title, color = p.text, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(np.title, color = p.text, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 // Tap the creator to open their channel.
                 Row(
                     Modifier
@@ -380,9 +380,9 @@ private fun androidx.compose.foundation.layout.ColumnScope.PlayerDetails(app: Ma
                     Avatar(np.channel, np.avatar, 22.dp)
                     Spacer(Modifier.width(6.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(np.channel, color = p.text, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                        Text(np.channel, color = p.text, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                         val sub = listOf(np.subscribers, np.meta).filter { it.isNotBlank() }.joinToString("  ·  ")
-                        if (sub.isNotEmpty()) Text(sub, color = p.dim, fontSize = 8.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (sub.isNotEmpty()) Text(sub, color = p.dim, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     if (app.signedIn) {
                         Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -452,7 +452,7 @@ private fun ActionPill(label: String, strong: Boolean = false, lit: Boolean = fa
                 lit -> p.accent
                 else -> p.text
             },
-            fontSize = 9.sp,
+            fontSize = 9.5.sp,
             fontWeight = FontWeight.Bold,
         )
     }
@@ -469,7 +469,7 @@ fun Toast(text: String?, modifier: Modifier) {
         Text(
             shown,
             color = p.bg,
-            fontSize = 10.sp,
+            fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             modifier = modifier
                 .graphicsLayer { this.alpha = alpha }
@@ -499,7 +499,7 @@ fun ScreenBanner(down: Boolean?, modifier: Modifier) {
         ) {
             Text(if (shown) "⬇" else "⬆", color = p.accent, fontSize = 30.sp, fontWeight = FontWeight.Bold)
             Text(if (shown) "Bottom screen" else "Top screen", color = p.text, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-            Text(if (shown) "Swipe up on the sidebar to send it back" else "Swipe down on the sidebar to send it back", color = p.dim, fontSize = 10.sp)
+            Text(if (shown) "Swipe up on the sidebar to send it back" else "Swipe down on the sidebar to send it back", color = p.dim, fontSize = 11.sp)
         }
     }
 }
@@ -544,7 +544,7 @@ private fun PlayerControls(app: MainActivity, panelTab: Boolean = false) {
             Text(
                 "︿  Up next & comments",
                 color = Color.White,
-                fontSize = 10.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -560,7 +560,7 @@ private fun PlayerControls(app: MainActivity, panelTab: Boolean = false) {
             Text(
                 "${formatDuration(shownMs / 1000).ifEmpty { "0:00" }} / ${formatDuration(app.durationMs / 1000).ifEmpty { "--:--" }}",
                 color = Color.White,
-                fontSize = 9.sp,
+                fontSize = 10.5.sp,
                 fontWeight = FontWeight.Bold,
             )
             val dur = app.durationMs.coerceAtLeast(1)
@@ -644,7 +644,7 @@ private fun PlayerOptions(app: MainActivity) {
             }
             OptionRow("Captions") {
                 item { Chip("Off", app.caption == null) { app.chooseCaption(null) } }
-                if (app.captionTracks.isEmpty()) item { Text("None for this video", color = Color(0xB0FFFFFF), fontSize = 10.sp, modifier = Modifier.padding(6.dp)) }
+                if (app.captionTracks.isEmpty()) item { Text("None for this video", color = Color(0xB0FFFFFF), fontSize = 11.sp, modifier = Modifier.padding(6.dp)) }
                 items(app.captionTracks) { t -> Chip(t.label, app.caption == t) { app.chooseCaption(t) } }
             }
         }
@@ -655,7 +655,7 @@ private fun PlayerOptions(app: MainActivity) {
 @Composable
 private fun OptionRow(title: String, content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {
     Column {
-        Text(title, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 2.dp, bottom = 3.dp))
+        Text(title, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 2.dp, bottom = 3.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), content = content)
     }
 }
@@ -693,10 +693,10 @@ fun CommentsPane(app: MainActivity, list: LazyListState) {
             CommentRow(comment, indent = thread != null) { if (thread == null && comment.replies != null) app.openThread(comment) }
         }
         when {
-            loading -> item(key = "loading") { Text("Loading comments...", color = p.dim, fontSize = 9.sp, modifier = Modifier.padding(8.dp)) }
-            thread == null && c.disabled -> item(key = "off") { Text("Comments are turned off for this video.", color = p.dim, fontSize = 10.sp, modifier = Modifier.padding(8.dp)) }
-            thread == null && c.error != null -> item(key = "err") { Text(c.error, color = p.dim, fontSize = 10.sp, modifier = Modifier.padding(8.dp)) }
-            items.isEmpty() -> item(key = "none") { Text("No comments yet.", color = p.dim, fontSize = 10.sp, modifier = Modifier.padding(8.dp)) }
+            loading -> item(key = "loading") { Text("Loading comments...", color = p.dim, fontSize = 9.5.sp, modifier = Modifier.padding(8.dp)) }
+            thread == null && c.disabled -> item(key = "off") { Text("Comments are turned off for this video.", color = p.dim, fontSize = 11.sp, modifier = Modifier.padding(8.dp)) }
+            thread == null && c.error != null -> item(key = "err") { Text(c.error, color = p.dim, fontSize = 11.sp, modifier = Modifier.padding(8.dp)) }
+            items.isEmpty() -> item(key = "none") { Text("No comments yet.", color = p.dim, fontSize = 11.sp, modifier = Modifier.padding(8.dp)) }
         }
     }
 }
@@ -723,24 +723,24 @@ private fun CommentRow(c: Comment, indent: Boolean = false, highlight: Boolean =
                 Text(
                     c.author + if (c.verified) " ✓" else "",
                     color = if (c.byCreator) p.accent else p.text,
-                    fontSize = 9.sp,
+                    fontSize = 9.5.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
-                Text("  ${c.ago}", color = p.dim, fontSize = 8.sp, maxLines = 1)
-                if (c.pinned) Text("  · Pinned", color = p.dim, fontSize = 8.sp)
+                Text("  ${c.ago}", color = p.dim, fontSize = 9.sp, maxLines = 1)
+                if (c.pinned) Text("  · Pinned", color = p.dim, fontSize = 9.sp)
             }
-            Text(c.text, color = p.text, fontSize = 9.5.sp, lineHeight = 12.sp, maxLines = 8, overflow = TextOverflow.Ellipsis)
+            Text(c.text, color = p.text, fontSize = 10.5.sp, lineHeight = 13.5.sp, maxLines = 8, overflow = TextOverflow.Ellipsis)
             Row(Modifier.padding(top = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (c.likes.isNotEmpty()) Text("▲ ${c.likes}", color = p.dim, fontSize = 8.sp, fontWeight = FontWeight.Bold)
-                if (c.hearted) Text("   ♥ from the creator", color = Color(0xFFFF5C7A), fontSize = 8.sp)
+                if (c.likes.isNotEmpty()) Text("▲ ${c.likes}", color = p.dim, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                if (c.hearted) Text("   ♥ from the creator", color = Color(0xFFFF5C7A), fontSize = 9.sp)
                 if (c.replyCount > 0 && !highlight) {
                     Text(
                         "   ${c.replyCount} ${if (c.replyCount == 1) "reply" else "replies"}",
                         color = p.accent,
-                        fontSize = 8.5.sp,
+                        fontSize = 9.5.sp,
                         fontWeight = FontWeight.Bold,
                     )
                 }
@@ -763,7 +763,7 @@ fun CommentsPage(app: MainActivity) {
         ) {
             Column(Modifier.weight(1f)) {
                 Text(commentsLabel(app.comments), color = p.text, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                Text(np.title, color = p.dim, fontSize = 8.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(np.title, color = p.dim, fontSize = 9.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Pill("Close") { app.closeCommentsPage() }
         }
@@ -796,7 +796,7 @@ fun MiniPlayer(app: MainActivity, np: NowPlaying, modifier: Modifier) {
             Box(Modifier.align(Alignment.BottomStart).fillMaxWidth(frac).height(2.dp).background(p.accent))
         }
         Row(Modifier.padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(np.title, color = p.text, fontSize = 8.5.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Text(np.title, color = p.text, fontSize = 9.5.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             MiniButton(if (app.isPlaying) "||" else "▶") { app.togglePause() }
             MiniButton("✕") { app.close() }
         }
@@ -815,7 +815,7 @@ private fun MiniButton(label: String, onClick: () -> Unit) {
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = p.text, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = p.text, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -838,7 +838,7 @@ fun SearchScreen(app: MainActivity) {
                 value = text,
                 onValueChange = { text = it },
                 singleLine = true,
-                textStyle = TextStyle(color = p.text, fontSize = 12.sp),
+                textStyle = TextStyle(color = p.text, fontSize = 12.5.sp),
                 cursorBrush = SolidColor(p.accent),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { app.runSearch(text) }),
@@ -849,7 +849,7 @@ fun SearchScreen(app: MainActivity) {
                     .background(p.card)
                     .padding(horizontal = 14.dp, vertical = 9.dp),
                 decorationBox = { inner ->
-                    if (text.isEmpty()) Text("Search YouTube", color = p.dim, fontSize = 12.sp)
+                    if (text.isEmpty()) Text("Search YouTube", color = p.dim, fontSize = 12.5.sp)
                     inner()
                 },
             )
