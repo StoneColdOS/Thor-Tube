@@ -23,6 +23,7 @@ Nothing else. There's no analytics, crash reporting service, or tracking. All co
 
 - **Internet:** to reach YouTube.
 - **Vibrate:** the buzz when the app moves between screens.
+- **Foreground service (media playback):** only used if you turn on screen-off audio in Setup. It lets Android keep the sound playing with the screen off and show the "now playing" controls. Granted at install, with no prompt; nothing runs in the background while the switch is off. The media session only accepts control from this app and Android itself.
 
 ## How releases are built
 

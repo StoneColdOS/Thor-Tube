@@ -31,6 +31,7 @@ Test builds (**Thor-Tube-latest.apk**, the "latest" pre-release) install as a se
 - **Bottom screen:** under the video are the title, creator (with Subscribe, Like and Save when signed in), and Up next / Comments.
 - **Channels:** tap the creator under a video to open their channel: newest uploads, Subscribe, and **+ Add to Home** to pin them as a tab.
 - **Picks up where you left off** in videos over 3 minutes. A red line on the thumbnail shows how far you got.
+- **Screen-off audio** (Setup > Playback, off by default): sound keeps going with the screen off or when you leave the app, with play, pause and next in the notification shade. Only the sound streams while the screen is off.
 - **If YouTube changes something** and a video won't play, the app says so and offers a button to the newest release.
 - **Top screen:** the video fills the screen. Push down, swipe up, or tap the "Up next & comments" tab to pull up a panel with the rest; B, swipe down, or tap the video to put it away.
 - **Full screen:** ⛶, Y, or swipe up. **Minimize:** swipe down or B; it keeps playing in the corner while you browse. Tap it or press X to bring it back.
