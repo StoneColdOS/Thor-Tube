@@ -151,6 +151,7 @@ class MainActivity : ComponentActivity() {
     var durationMs by mutableStateOf(0L)
         private set
     var playerProblem by mutableStateOf<String?>(null)
+        private set
     /** True when the problem looks like YouTube changed something: offer the newest release. */
     var problemNeedsUpdate by mutableStateOf(false)
 
@@ -184,7 +185,6 @@ class MainActivity : ComponentActivity() {
         runCatching { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/StoneColdOS/Thor-Tube/releases/latest"))) }
             .onFailure { say("Couldn't open the browser") }
     }
-        private set
     /** Bumps on L1/R1 and other keys the player screen reacts to. */
     var controlsPing by mutableStateOf(0)
         private set
