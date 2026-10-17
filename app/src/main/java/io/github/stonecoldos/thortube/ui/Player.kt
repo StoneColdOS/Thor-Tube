@@ -290,12 +290,14 @@ fun PlayerScreen(app: MainActivity, np: NowPlaying) {
             }
             if (!app.firstFrame && app.crtMode == CrtMode.OFF) Thumb(np.video.bigThumbnail, Modifier.fillMaxSize())
             app.playerProblem?.let {
-                Text(
-                    it,
-                    color = Color.White,
-                    fontSize = 11.sp,
-                    modifier = Modifier.align(Alignment.Center).background(Color(0xC0000000), RoundedCornerShape(8.dp)).padding(10.dp),
-                )
+                Column(
+                    Modifier.align(Alignment.Center).padding(16.dp).background(Color(0xC0000000), RoundedCornerShape(10.dp)).padding(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(it, color = Color.White, fontSize = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    if (app.problemNeedsUpdate) Pill("Check for an update", primary = true) { app.openReleases() }
+                }
             }
             // Captions sit above the bottom edge, and lift clear of the seek bar when controls show.
             if (app.captionText.isNotEmpty()) {

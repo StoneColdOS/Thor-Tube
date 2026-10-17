@@ -601,6 +601,13 @@ fun VideoCard(
                 .clip(RoundedCornerShape(8.dp)),
         ) {
             Thumb(v.thumbnail, Modifier.fillMaxSize())
+            // How far you got last time, like YouTube's red line.
+            val watched = io.github.stonecoldos.thortube.data.Resume.progress(v.id)
+            if (watched > 0f) {
+                Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(3.dp).background(Color(0x80000000))) {
+                    Box(Modifier.fillMaxHeight().fillMaxWidth(watched).background(Color(0xFFFF3B3B)))
+                }
+            }
             val d = formatDuration(v.durationSecs)
             if (d.isNotEmpty()) {
                 Text(

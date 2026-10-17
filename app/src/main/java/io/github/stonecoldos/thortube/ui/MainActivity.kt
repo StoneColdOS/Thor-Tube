@@ -55,11 +55,13 @@ import io.github.stonecoldos.thortube.data.STARTER_TOPICS
 import io.github.stonecoldos.thortube.data.Tab
 import io.github.stonecoldos.thortube.data.Video
 import io.github.stonecoldos.thortube.data.ago
+import io.github.stonecoldos.thortube.data.formatDuration
 import io.github.stonecoldos.thortube.player.MediaSources
 import io.github.stonecoldos.thortube.player.PlaybackAttempt
 import io.github.stonecoldos.thortube.player.PlaybackPlanner
 import io.github.stonecoldos.thortube.data.CaptionTrack
 import io.github.stonecoldos.thortube.data.Captions
+import io.github.stonecoldos.thortube.data.Resume
 import io.github.stonecoldos.thortube.data.Cue
 import io.github.stonecoldos.thortube.player.StreamCache
 import io.github.stonecoldos.thortube.youtube.YouTubeAccount
@@ -149,6 +151,39 @@ class MainActivity : ComponentActivity() {
     var durationMs by mutableStateOf(0L)
         private set
     var playerProblem by mutableStateOf<String?>(null)
+    /** True when the problem looks like YouTube changed something: offer the newest release. */
+    var problemNeedsUpdate by mutableStateOf(false)
+
+    /** Turn a load error into words people can act on. */
+    private fun explain(error: Throwable): Pair<String, Boolean> {
+        // The real reason can be wrapped a few layers down.
+        val chain = generateSequence(error) { it.cause }.take(6).toList()
+        val e = chain.firstOrNull { it is org.schabi.newpipe.extractor.exceptions.ContentNotAvailableException }
+            ?: chain.firstOrNull { it is java.io.IOException }
+            ?: error
+        return when (e) {
+        is org.schabi.newpipe.extractor.exceptions.AgeRestrictedContentException ->
+            "This video is age-restricted, so it can't play here." to false
+        is org.schabi.newpipe.extractor.exceptions.PrivateContentException ->
+            "This video is private." to false
+        is org.schabi.newpipe.extractor.exceptions.GeographicRestrictionException ->
+            "This video isn't available in your country." to false
+        is org.schabi.newpipe.extractor.exceptions.PaidContentException ->
+            "This video is for paying members only." to false
+        is org.schabi.newpipe.extractor.exceptions.ContentNotAvailableException ->
+            "This video isn't available." to false
+        is java.io.IOException ->
+            "Couldn't reach YouTube. Check the connection and try again." to false
+        else ->
+            "YouTube may have changed something, so this video won't load.\nA Thor-Tube update usually fixes it." to true
+        }
+    }
+
+    /** Opens the newest release, for when YouTube breaks playback. */
+    fun openReleases() {
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/StoneColdOS/Thor-Tube/releases/latest"))) }
+            .onFailure { say("Couldn't open the browser") }
+    }
         private set
     /** Bumps on L1/R1 and other keys the player screen reacts to. */
     var controlsPing by mutableStateOf(0)
@@ -238,6 +273,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         hideSystemBars()
         settings = Settings(this)
+        Resume.init(this)
         theme = settings.theme
         crtMode = settings.crt
         quality = settings.quality
@@ -312,7 +348,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onPause() {
-        nowPlaying?.let { YouTubeHistory.flush(it.video.url, player.currentPosition / 1000f) }
+        nowPlaying?.let {
+            YouTubeHistory.flush(it.video.url, player.currentPosition / 1000f)
+            Resume.remember(it.video.id, player.currentPosition, durationMs)
+        }
         if (!moving) player.pause()
         super.onPause()
     }
@@ -779,6 +818,7 @@ class MainActivity : ComponentActivity() {
         firstFrame = false
         crtViews.forEach { it.targetStatic = 1f }   // a burst of snow until the new picture arrives
         playerProblem = null
+        problemNeedsUpdate = false
         optionsOpen = false
         panelOpen = false
         currentInfo = null
@@ -851,11 +891,17 @@ class MainActivity : ComponentActivity() {
                 playerProblem = "This video can't be played here."
                 return
             }
-            playAttempt(pendingStartMs.also { pendingStartMs = 0 })
+            // Pick up where you left off in longer videos (a few seconds early, to get your bearings).
+            val resumeAt = if (pendingStartMs > 0) pendingStartMs else (Resume.startAt(video.id) - 3_000).coerceAtLeast(0)
+            pendingStartMs = 0
+            if (resumeAt > 0 && Resume.startAt(video.id) > 0) say("Picking up at ${formatDuration(resumeAt / 1000)}")
+            playAttempt(resumeAt)
             YouTubeHistory.start(video.url, durationSecs)
         } catch (e: Exception) {
             AppLog.e(TAG, "Couldn't load a video", e)
-            playerProblem = "Couldn't load this video.\n${e.message?.take(120).orEmpty()}"
+            val (msg, update) = explain(e)
+            playerProblem = msg
+            problemNeedsUpdate = update
         }
     }
 
@@ -883,7 +929,10 @@ class MainActivity : ComponentActivity() {
                 val now = SystemClock.uptimeMillis()
                 if (now - lastHistory > 5_000) {
                     lastHistory = now
-                    nowPlaying?.let { YouTubeHistory.tick(it.video.url, player.currentPosition / 1000f, player.isPlaying) }
+                    nowPlaying?.let {
+                        YouTubeHistory.tick(it.video.url, player.currentPosition / 1000f, player.isPlaying)
+                        if (player.isPlaying) Resume.remember(it.video.id, player.currentPosition, durationMs)
+                    }
                 }
                 delay(if (cues.isNotEmpty()) 100 else 250)
             }
@@ -906,6 +955,7 @@ class MainActivity : ComponentActivity() {
 
         override fun onPlaybackStateChanged(state: Int) {
             if (state == Player.STATE_ENDED) {
+                nowPlaying?.let { Resume.finished(it.video.id) }
                 // Autoplay, like YouTube: on to the next one.
                 nowPlaying?.let { np -> np.upNext.firstOrNull()?.let { open(it, np.upNext, stayMinimized = true) } }
             }
@@ -917,7 +967,12 @@ class MainActivity : ComponentActivity() {
                 attemptIndex++
                 playAttempt(player.currentPosition)
             } else {
-                playerProblem = "Couldn't play this video (${error.errorCodeName})."
+                // Every way of playing it failed. Network trouble is the connection; anything else is
+                // usually YouTube changing how streams work, which an update fixes.
+                val network = error.errorCode in 2000..2999
+                playerProblem = if (network) "Couldn't reach YouTube. Check the connection and try again."
+                else "YouTube may have changed something, so this video won't play.\nA Thor-Tube update usually fixes it."
+                problemNeedsUpdate = !network
             }
         }
     }
