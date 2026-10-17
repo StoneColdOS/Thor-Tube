@@ -1,0 +1,13 @@
+# Dependabot opens a pull request when something this app depends on has an update,
+# so fixes (like NewPipeExtractor catching up with YouTube) arrive ready to approve.
+version: 2
+updates:
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"

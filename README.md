@@ -4,6 +4,8 @@ An unofficial YouTube app made for the AYN Thor. It lives on the bottom screen, 
 
 Not made by, or affiliated with, YouTube, Google, or AYN.
 
+Built with AI assistance: I designed it, tested it on my Thor and decided what goes in, and an AI (Claude) wrote most of the code. Everything is public here, so you can see exactly what it does. See [SECURITY.md](SECURITY.md) for how it handles your data.
+
 ## Install
 
 Grab the newest **Thor-Tube-vX.Y.Z.apk** from [Releases](../../releases) on the Thor and open it. Updates install over it.
@@ -27,6 +29,9 @@ Test builds (**Thor-Tube-latest.apk**, the "latest" pre-release) install as a se
 - **Tap** the video for controls. **Double-tap** the left or right side to skip 10 seconds; keep tapping to skip more.
 - **⚙** sets quality (Auto, up to 1080p), speed (0.5x to 2x) and captions. **CC** turns captions on and off. Your quality and caption language are remembered.
 - **Bottom screen:** under the video are the title, creator (with Subscribe, Like and Save when signed in), and Up next / Comments.
+- **Channels:** tap the creator under a video to open their channel: newest uploads, Subscribe, and **+ Add to Home** to pin them as a tab.
+- **Picks up where you left off** in videos over 3 minutes. A red line on the thumbnail shows how far you got.
+- **If YouTube changes something** and a video won't play, the app says so and offers a button to the newest release.
 - **Top screen:** the video fills the screen. Push down, swipe up, or tap the "Up next & comments" tab to pull up a panel with the rest; B, swipe down, or tap the video to put it away.
 - **Full screen:** ⛶, Y, or swipe up. **Minimize:** swipe down or B; it keeps playing in the corner while you browse. Tap it or press X to bring it back.
 - When a video ends, the next one plays.
@@ -57,6 +62,7 @@ The same list is in Setup > Controls.
 - Logs stay in the app's private storage and never contain video links, titles, searches or account details. Setup > **Share logs** sends them through Android's share menu if something goes wrong.
 - Encrypted connections only; plain HTTP is blocked.
 - Release builds are signed with a private key and aren't debuggable.
+- See [SECURITY.md](SECURITY.md) for everything it stores, everything it talks to, and how to report a problem.
 - Release builds check this repo's public releases page for a newer version, at most every 6 hours. The check sends nothing about you or the device, and only shows a Download / Later banner; nothing installs by itself.
 
 ## How it works
@@ -68,6 +74,7 @@ The same list is in Setup > Controls.
 ## Building and releasing
 
 - Every push builds a test APK with GitHub Actions and updates the "latest" pre-release. No Android Studio needed.
+- Build add-ons are pinned to exact versions, and Dependabot opens a pull request when a dependency (like NewPipeExtractor) has an update.
 - Pushing a branch named `release/vX.Y.Z` builds a signed release, checks its signature and that it isn't debuggable, and publishes it as vX.Y.Z. It needs the `THOR_KEYSTORE_BASE64` and `THOR_KEYSTORE_PASSWORD` repository secrets.
 
 ## License
