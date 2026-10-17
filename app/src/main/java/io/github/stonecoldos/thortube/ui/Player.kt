@@ -369,7 +369,14 @@ private fun androidx.compose.foundation.layout.ColumnScope.PlayerDetails(app: Ma
         AnimatedVisibility(showInfo, enter = expandVertically(tween(200)) + fadeIn(tween(200)), exit = shrinkVertically(tween(200)) + fadeOut(tween(150))) {
             Column(Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 6.dp)) {
                 Text(np.title, color = p.text, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Tap the creator to open their channel.
+                Row(
+                    Modifier
+                        .padding(top = 4.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(enabled = np.channelUrl.isNotBlank()) { app.openChannel(np.channelUrl, np.channel) },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Avatar(np.channel, np.avatar, 22.dp)
                     Spacer(Modifier.width(6.dp))
                     Column(Modifier.weight(1f)) {

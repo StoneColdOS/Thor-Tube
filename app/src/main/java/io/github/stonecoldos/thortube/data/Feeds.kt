@@ -25,6 +25,9 @@ data class Tab(val label: String, val query: String?, val channel: String? = nul
 
 val FOR_YOU = Tab("For You", null)
 
+/** What a channel page shows. */
+data class ChannelData(val url: String, val name: String, val avatar: String?, val subscribers: Long, val videos: List<Video>)
+
 /** Quick picks offered when adding a tab (and the mix For You falls back to when signed out). */
 val STARTER_TOPICS = listOf(
     Tab("Gaming", "gaming"),
@@ -61,6 +64,23 @@ object Feeds {
         tab.isForYou -> forYou(all)
         tab.channel != null -> channel(tab.channel)
         else -> topic(tab.query!!)
+    }
+
+    /** A channel page: who they are, plus their newest uploads. */
+    suspend fun channelPage(url: String): ChannelData = withContext(Dispatchers.IO) {
+        val service = ServiceList.YouTube
+        val info = org.schabi.newpipe.extractor.channel.ChannelInfo.getInfo(service, url)
+        val videosTab = info.tabs.firstOrNull { org.schabi.newpipe.extractor.channel.tabs.ChannelTabs.VIDEOS in it.contentFilters }
+        val videos = videosTab?.let {
+            org.schabi.newpipe.extractor.channel.tabs.ChannelTabInfo.getInfo(service, it).relatedItems.videos()
+        }.orEmpty()
+        ChannelData(
+            url = info.url ?: url,
+            name = info.name.orEmpty(),
+            avatar = info.avatars.maxByOrNull { it.height }?.url,
+            subscribers = info.subscriberCount,
+            videos = videos.map { v -> if (v.uploaderName.isBlank()) v.copy(uploaderName = info.name.orEmpty(), uploaderUrl = url) else v },
+        )
     }
 
     /** A channel's newest uploads. */

@@ -119,6 +119,17 @@ data class NowPlaying(
     val avatar: String? = null,
     val subscribers: String = "",
     val meta: String = "",
+    val channelUrl: String = video.uploaderUrl,
+)
+
+/** An open channel page. */
+data class ChannelUi(
+    val url: String,
+    val name: String,
+    val data: io.github.stonecoldos.thortube.data.ChannelData? = null,
+    val loading: Boolean = true,
+    val error: String? = null,
+    val subscribed: Boolean? = null,
 )
 
 /**
@@ -295,7 +306,7 @@ class MainActivity : ComponentActivity() {
                             LaunchedEffect(signedIn) {
                                 me = if (signedIn) runCatching { YouTubeFeed.me() }.getOrNull() else null
                             }
-                            Rail(screen, signedIn, me, railFocus, onSwipe = { down -> moveScreen(down) }) { screen = it }
+                            Rail(screen, signedIn, me, railFocus, onSwipe = { down -> moveScreen(down) }) { closeChannel(); screen = it }
                             Crossfade(screen, Modifier.weight(1f).fillMaxSize(), animationSpec = tween(180), label = "screen") { s ->
                                 Box(Modifier.fillMaxSize()) {
                                     when (s) {
@@ -306,6 +317,7 @@ class MainActivity : ComponentActivity() {
                                         Screen.CRT -> CrtScreen(this@MainActivity)
                                         Screen.SETUP -> SetupScreen(this@MainActivity)
                                     }
+                                    channelPage?.let { ChannelScreen(this@MainActivity, it) }
                                 }
                             }
                         }
@@ -620,6 +632,72 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // ---------------------------------------------------------------- channel pages
+
+    var channelPage by mutableStateOf<ChannelUi?>(null)
+        private set
+    private var channelJob: Job? = null
+
+    /** Open a channel's page over the current screen. A playing video shrinks into the corner. */
+    fun openChannel(url: String, name: String) {
+        if (url.isBlank()) return say("Couldn't find this channel")
+        if (nowPlaying != null && !minimized) minimize()
+        commentsPageOpen = false
+        channelJob?.cancel()
+        channelPage = ChannelUi(url, name)
+        channelJob = lifecycleScope.launch {
+            val result = runCatching { Feeds.channelPage(url) }
+            channelPage = channelPage?.takeIf { it.url == url }?.let { ui ->
+                result.fold(
+                    { d -> ui.copy(name = d.name.ifBlank { ui.name }, data = d, loading = false) },
+                    {
+                        AppLog.w(TAG, "Channel page failed", it)
+                        ui.copy(loading = false, error = "Couldn't load this channel.")
+                    },
+                )
+            } ?: return@launch
+            gridStates.remove(CHANNEL_GRID)
+            Thumbnails.prefetch(result.getOrNull()?.videos.orEmpty().take(24).map { it.thumbnail })
+            // Whether you follow them: YouTube says so on any of their videos.
+            val first = result.getOrNull()?.videos?.firstOrNull()
+            if (signedIn && first != null) {
+                YouTubeActions.state(first.id)?.let { st ->
+                    channelPage = channelPage?.takeIf { it.url == url }?.copy(subscribed = st.subscribed)
+                }
+            }
+        }
+    }
+
+    fun closeChannel() {
+        channelJob?.cancel()
+        channelPage = null
+    }
+
+    fun toggleChannelSubscribe() {
+        val ui = channelPage ?: return
+        if (!signedIn) return say("Sign in (Setup) to subscribe")
+        val id = Regex("UC[A-Za-z0-9_-]{22}").find(ui.data?.url ?: ui.url)?.value ?: return say("Couldn't find this channel")
+        val on = ui.subscribed != true
+        channelPage = ui.copy(subscribed = on)
+        lifecycleScope.launch {
+            if (YouTubeActions.subscribe(id, on)) {
+                say(if (on) "Subscribed to ${ui.name}" else "Unsubscribed from ${ui.name}")
+                subsChannels = emptyList()
+                subsFeed = FeedState()
+                if (channelId == id) subscribed = on
+            } else {
+                channelPage = channelPage?.copy(subscribed = !on)
+                say("Couldn't update the subscription")
+            }
+        }
+    }
+
+    /** Pin this channel's newest uploads as a Home tab. */
+    fun addChannelTab() {
+        val ui = channelPage ?: return
+        addTab(Tab(ui.name, null, ui.data?.url ?: ui.url))
+    }
+
     fun toggleSubscribe() {
         val np = nowPlaying ?: return
         if (!signedIn) return say("Sign in (Setup) to subscribe")
@@ -872,6 +950,7 @@ class MainActivity : ComponentActivity() {
             nowPlaying = nowPlaying?.takeIf { it.video.url == video.url }?.copy(
                 title = info.name,
                 channel = info.uploaderName.orEmpty(),
+                channelUrl = info.uploaderUrl.orEmpty(),
                 avatar = info.uploaderAvatars.maxByOrNull { it.height }?.url,
                 subscribers = subscribers(subs),
                 meta = listOfNotNull(
@@ -1521,6 +1600,7 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_CHANNEL = "io.github.stonecoldos.thortube.CHANNEL"
         const val EXTRA_POSITION = "io.github.stonecoldos.thortube.POSITION"
         const val EXTRA_MOVED = "io.github.stonecoldos.thortube.MOVED"
+        const val CHANNEL_GRID = 40_000
         private const val TAG = "ThorTube"
     }
 }

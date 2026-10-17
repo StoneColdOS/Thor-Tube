@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -272,4 +273,58 @@ fun CrtScreen(app: MainActivity) {
             Text("Your video in the corner shows the effect live.", color = p.dim, fontSize = 9.sp, modifier = Modifier.padding(top = 4.dp))
         }
     }
+}
+
+// ------------------------------------------------------------------ channel page
+
+/** A channel: who they are, Subscribe and "Add to Home", then their newest uploads. */
+@Composable
+fun ChannelScreen(app: MainActivity, ui: ChannelUi) {
+    val p = LocalPalette.current
+    BackHandler { app.closeChannel() }
+    Box(Modifier.fillMaxSize().background(p.bg)) {
+        val d = ui.data
+        when {
+            d == null && ui.loading -> Message("Loading ${ui.name.ifBlank { "channel" }}...")
+            d == null -> Message(ui.error ?: "Couldn't load this channel.", "Try again") { app.openChannel(ui.url, ui.name) }
+            else -> VideoGrid(
+                app = app,
+                videos = d.videos,
+                tab = MainActivity.CHANNEL_GRID,
+                header = { ChannelHeader(app, ui, d) },
+                onOpen = { v -> app.open(v, d.videos) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChannelHeader(app: MainActivity, ui: ChannelUi, d: io.github.stonecoldos.thortube.data.ChannelData) {
+    val p = LocalPalette.current
+    Column(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+        Pill("‹  Back") { app.closeChannel() }
+        Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Avatar(d.name, d.avatar, 44.dp)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(d.name, color = p.text, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val subs = if (d.subscribers > 0) "${shortCount(d.subscribers)} subscribers" else ""
+                Text(listOf(subs, "${d.videos.size} recent videos").filter { it.isNotBlank() }.joinToString("  ·  "), color = p.dim, fontSize = 9.5.sp)
+            }
+        }
+        Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (app.signedIn) {
+                Pill(if (ui.subscribed == true) "✓ Subscribed" else "Subscribe", primary = ui.subscribed != true) { app.toggleChannelSubscribe() }
+            }
+            val pinned = app.homeTabs.any { it.channel == d.url }
+            Pill(if (pinned) "✓ On Home" else "+ Add to Home") { if (!pinned) app.addChannelTab() }
+        }
+        if (d.videos.isEmpty()) Text("No videos yet.", color = p.dim, fontSize = 10.sp, modifier = Modifier.padding(top = 14.dp))
+    }
+}
+
+private fun shortCount(n: Long): String = when {
+    n >= 1_000_000 -> "%.1fM".format(n / 1_000_000.0).replace(".0M", "M")
+    n >= 1_000 -> "%.1fK".format(n / 1_000.0).replace(".0K", "K")
+    else -> n.toString()
 }
