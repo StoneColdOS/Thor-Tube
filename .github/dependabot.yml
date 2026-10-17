@@ -1,13 +1,27 @@
-# Dependabot opens a pull request when something this app depends on has an update,
-# so fixes (like NewPipeExtractor catching up with YouTube) arrive ready to approve.
+# Dependabot proposes updates as pull requests, so fixes (like NewPipeExtractor catching up
+# with YouTube) arrive ready to approve. Kept quiet on purpose: small, safe updates only,
+# bundled into one pull request per month; big version jumps are left for a deliberate upgrade.
 version: 2
 updates:
   - package-ecosystem: "gradle"
     directory: "/"
     schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
+      interval: "monthly"
+    open-pull-requests-limit: 2
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      everything:
+        patterns: ["*"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
+    open-pull-requests-limit: 1
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      actions:
+        patterns: ["*"]
