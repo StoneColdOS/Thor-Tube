@@ -1037,6 +1037,9 @@ class MainActivity : ComponentActivity() {
             if (resumeAt > 0 && Resume.startAt(video.id) > 0) say("Picking up at ${formatDuration(resumeAt / 1000)}")
             playAttempt(resumeAt)
             YouTubeHistory.start(video.url, durationSecs)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Another video was picked while this one loaded. Not a failure, so no error box.
+            throw e
         } catch (e: Exception) {
             AppLog.e(TAG, "Couldn't load a video", e)
             val (msg, update) = explain(e)
