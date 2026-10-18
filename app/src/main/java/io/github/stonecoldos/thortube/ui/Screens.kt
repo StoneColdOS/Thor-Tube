@@ -767,9 +767,11 @@ fun SetupScreen(app: MainActivity) {
             Section("About") {
                 Text("Thor-Tube ${BuildConfig.VERSION_NAME}. Unofficial; not made by YouTube or AYN.", color = p.dim, fontSize = 9.5.sp)
                 Text(app.updateStatus, color = if (app.update != null) p.accent else p.dim, fontSize = 9.5.sp, fontWeight = if (app.update != null) FontWeight.Bold else FontWeight.Normal)
+                Spacer(Modifier.height(6.dp))
                 if (app.update != null) {
-                    Spacer(Modifier.height(6.dp))
                     Pill("Get v${app.update?.version}", primary = true) { app.openUpdate() }
+                } else if (io.github.stonecoldos.thortube.UpdateCheck.enabled) {
+                    Pill(if (app.checkingUpdate) "Checking..." else "Check for updates") { app.checkForUpdateNow() }
                 }
                 Spacer(Modifier.height(8.dp))
                 Pill("Share logs") { app.shareLogs() }

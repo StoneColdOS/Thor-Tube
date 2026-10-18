@@ -64,7 +64,7 @@ The same list is in Setup > Controls.
 - Encrypted connections only; plain HTTP is blocked.
 - Release builds are signed with a private key and aren't debuggable.
 - See [SECURITY.md](SECURITY.md) for everything it stores, everything it talks to, and how to report a problem.
-- Release builds check this repo's public releases page for a newer version, at most every 6 hours. The check sends nothing about you or the device, and only shows a Download / Later banner; nothing installs by itself.
+- Release builds check this repo's public releases page for a newer version, at most every 6 hours, or right away with Setup > **Check for updates**. The check sends nothing about you or the device, and only shows a Download / Later banner; nothing installs by itself.
 
 ## How it works
 

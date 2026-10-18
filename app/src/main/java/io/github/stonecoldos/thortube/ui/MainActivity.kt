@@ -598,18 +598,35 @@ class MainActivity : ComponentActivity() {
     var updateStatus by mutableStateOf(if (io.github.stonecoldos.thortube.UpdateCheck.enabled) "Checking for updates..." else "Test build (no update check)")
         private set
 
+    /** True while Setup > Check now is asking GitHub. */
+    var checkingUpdate by mutableStateOf(false)
+        private set
+
     private fun checkForUpdate() {
         if (!io.github.stonecoldos.thortube.UpdateCheck.enabled) return
         lifecycleScope.launch {
             delay(3_000)
-            io.github.stonecoldos.thortube.UpdateCheck.check(this@MainActivity).fold(
-                { u ->
-                    update = u
-                    updateStatus = if (u != null) "v${u.version} is available" else "Up to date"
-                },
-                { updateStatus = "Couldn't check for updates" },
-            )
+            runUpdateCheck(force = false)
         }
+    }
+
+    /** Setup > Check now: ask GitHub right away instead of using the saved answer. */
+    fun checkForUpdateNow() {
+        if (!io.github.stonecoldos.thortube.UpdateCheck.enabled || checkingUpdate) return
+        lifecycleScope.launch { runUpdateCheck(force = true) }
+    }
+
+    private suspend fun runUpdateCheck(force: Boolean) {
+        checkingUpdate = true
+        updateStatus = "Checking for updates..."
+        io.github.stonecoldos.thortube.UpdateCheck.check(this@MainActivity, force).fold(
+            { u ->
+                update = u
+                updateStatus = if (u != null) "v${u.version} is available" else "Up to date"
+            },
+            { updateStatus = "Couldn't check for updates. Check the connection and try again." },
+        )
+        checkingUpdate = false
     }
 
     fun openUpdate() {
