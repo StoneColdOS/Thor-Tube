@@ -85,6 +85,8 @@ import android.opengl.GLSurfaceView
 import io.github.stonecoldos.thortube.crt.CrtRenderer
 import io.github.stonecoldos.thortube.data.Comment
 import io.github.stonecoldos.thortube.data.formatDuration
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import kotlinx.coroutines.delay
 
 /** The picture. Each place that shows the video (full player, mini-player) gets its own view. */
@@ -616,7 +618,7 @@ private fun SkipBadge(skip: Pair<Int, Int>?, modifier: Modifier) {
     }
 }
 
-/** Quality, speed and captions, laid over the video. */
+/** Quality, speed, captions and the sleep timer, laid over the video. */
 @Composable
 private fun PlayerOptions(app: MainActivity) {
     val first = remember { FocusRequester() }
@@ -631,7 +633,8 @@ private fun PlayerOptions(app: MainActivity) {
             Modifier
                 .fillMaxWidth()
                 .align(Alignment.Center)
-                .padding(horizontal = 10.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(if (app.fullscreen) 14.dp else 6.dp),
         ) {
             val autoLabel = if (app.quality == 0 && app.playingHeight > 0) "Auto (${app.playingHeight}p)" else "Auto"
@@ -647,6 +650,16 @@ private fun PlayerOptions(app: MainActivity) {
                 if (app.captionTracks.isEmpty()) item { Text("None for this video", color = Color(0xB0FFFFFF), fontSize = 11.sp, modifier = Modifier.padding(6.dp)) }
                 items(app.captionTracks) { t -> Chip(t.label, app.caption == t) { app.chooseCaption(t) } }
             }
+            val sleepTitle = when {
+                app.sleepMinutes > 0 -> "Sleep  ·  ${formatDuration(app.sleepLeftMs / 1000).ifEmpty { "0:00" }} left"
+                app.sleepMinutes == MainActivity.SLEEP_END_OF_VIDEO -> "Sleep  ·  after this video"
+                else -> "Sleep"
+            }
+            OptionRow(sleepTitle) {
+                item { Chip("Off", app.sleepMinutes == 0) { app.chooseSleep(0) } }
+                items(SLEEP_MINUTES) { m -> Chip("$m min", app.sleepMinutes == m) { app.chooseSleep(m) } }
+                item { Chip("End of video", app.sleepMinutes == MainActivity.SLEEP_END_OF_VIDEO) { app.chooseSleep(MainActivity.SLEEP_END_OF_VIDEO) } }
+            }
         }
         RoundButton("✕", modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) { app.optionsOpen = false }
     }
@@ -661,6 +674,7 @@ private fun OptionRow(title: String, content: androidx.compose.foundation.lazy.L
 }
 
 private val SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
+private val SLEEP_MINUTES = listOf(15, 30, 45, 60)
 
 // ------------------------------------------------------------------ comments
 

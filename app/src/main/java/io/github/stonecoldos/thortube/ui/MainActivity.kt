@@ -258,6 +258,62 @@ class MainActivity : ComponentActivity() {
         player.setPlaybackSpeed(value)
     }
 
+    // ---- sleep timer (not remembered: every launch starts with it off)
+
+    /** Minutes chosen: 0 = off, [SLEEP_END_OF_VIDEO] = stop when this video ends. */
+    var sleepMinutes by mutableStateOf(0)
+        private set
+    /** Time left on a minutes timer, for the countdown in the options panel. */
+    var sleepLeftMs by mutableStateOf(0L)
+        private set
+    private var sleepJob: Job? = null
+
+    fun chooseSleep(minutes: Int) {
+        AppLog.i(TAG, "Sleep timer: ${if (minutes == SLEEP_END_OF_VIDEO) "end of video" else "$minutes min"}")
+        when {
+            minutes == 0 -> say("Sleep timer off")
+            minutes == SLEEP_END_OF_VIDEO -> say("Stopping after this video")
+            else -> say("Stopping in $minutes minutes")
+        }
+        startSleep(minutes, SystemClock.elapsedRealtime() + minutes * 60_000L)
+    }
+
+    /** When a minutes timer runs out, on the [SystemClock.elapsedRealtime] clock. */
+    private var sleepEnd = 0L
+
+    private fun startSleep(minutes: Int, end: Long) {
+        sleepJob?.cancel()
+        sleepJob = null
+        player.volume = 1f
+        sleepMinutes = minutes
+        sleepEnd = end
+        sleepLeftMs = if (minutes > 0) (end - SystemClock.elapsedRealtime()).coerceAtLeast(0) else 0
+        if (minutes <= 0) return
+        // Counted against the real clock, so a late tick never stretches the timer.
+        sleepJob = lifecycleScope.launch {
+            while (true) {
+                val left = end - SystemClock.elapsedRealtime()
+                sleepLeftMs = left.coerceAtLeast(0)
+                if (left <= 0) break
+                // The last 10 seconds fade the sound out instead of cutting it.
+                if (left <= SLEEP_FADE_MS) player.volume = left.toFloat() / SLEEP_FADE_MS
+                delay(if (left <= SLEEP_FADE_MS) 250 else 1_000)
+            }
+            fallAsleep()
+        }
+    }
+
+    /** Time's up: pause, put the volume back for next time, and turn the timer off. */
+    private fun fallAsleep() {
+        AppLog.i(TAG, "Sleep timer: paused")
+        player.pause()
+        player.volume = 1f
+        nowPlaying?.let { Resume.remember(it.video.id, player.currentPosition, durationMs) }
+        sleepJob = null
+        sleepMinutes = 0
+        sleepLeftMs = 0
+    }
+
     /** null turns captions off. The choice sticks for later videos. */
     fun chooseCaption(track: CaptionTrack?) {
         settings.captionLang = track?.lang
@@ -511,6 +567,8 @@ class MainActivity : ComponentActivity() {
                 restart.putExtra(EXTRA_URL, it.video.url)
                 restart.putExtra(EXTRA_POSITION, player.currentPosition)
             }
+            // Keep a running sleep timer going on the other screen.
+            if (sleepMinutes != 0) restart.putExtra(EXTRA_SLEEP_MINUTES, sleepMinutes).putExtra(EXTRA_SLEEP_END, sleepEnd)
             val ctx = applicationContext
             moving = false
             finishAndRemoveTask()
@@ -534,6 +592,11 @@ class MainActivity : ComponentActivity() {
             buzz()
             lifecycleScope.launch { powerOn() }
             announceScreen(it == 1)
+        }
+        intent?.getIntExtra(EXTRA_SLEEP_MINUTES, 0)?.takeIf { it != 0 }?.let {
+            startSleep(it, intent.getLongExtra(EXTRA_SLEEP_END, 0L))
+            intent.removeExtra(EXTRA_SLEEP_MINUTES)
+            intent.removeExtra(EXTRA_SLEEP_END)
         }
         intent?.getStringExtra(EXTRA_URL)?.let { url ->
             intent.removeExtra(EXTRA_URL)
@@ -1116,6 +1179,8 @@ class MainActivity : ComponentActivity() {
         override fun onPlaybackStateChanged(state: Int) {
             if (state == Player.STATE_ENDED) {
                 nowPlaying?.let { Resume.finished(it.video.id) }
+                // Sleep timer set to "End of video": stop here instead of playing the next one.
+                if (sleepMinutes == SLEEP_END_OF_VIDEO) return fallAsleep()
                 // Autoplay, like YouTube: on to the next one.
                 nowPlaying?.let { np -> np.upNext.firstOrNull()?.let { open(it, np.upNext, stayMinimized = true) } }
             }
@@ -1677,10 +1742,15 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        /** [sleepMinutes] value for "stop when this video ends". */
+        const val SLEEP_END_OF_VIDEO = -1
+        private const val SLEEP_FADE_MS = 10_000L
         const val EXTRA_URL = "io.github.stonecoldos.thortube.URL"
         const val EXTRA_CHANNEL = "io.github.stonecoldos.thortube.CHANNEL"
         const val EXTRA_POSITION = "io.github.stonecoldos.thortube.POSITION"
         const val EXTRA_MOVED = "io.github.stonecoldos.thortube.MOVED"
+        private const val EXTRA_SLEEP_MINUTES = "io.github.stonecoldos.thortube.SLEEP_MINUTES"
+        private const val EXTRA_SLEEP_END = "io.github.stonecoldos.thortube.SLEEP_END"
         const val CHANNEL_GRID = 40_000
         private const val TAG = "ThorTube"
     }

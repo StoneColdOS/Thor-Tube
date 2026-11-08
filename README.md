@@ -27,10 +27,11 @@ Test builds (**Thor-Tube-latest.apk**, the "latest" pre-release) install as a se
 ### Watching
 
 - **Tap** the video for controls. **Double-tap** the left or right side to skip 10 seconds; keep tapping to skip more.
-- **⚙** sets quality (Auto, up to 1080p), speed (0.5x to 2x) and captions. **CC** turns captions on and off. Your quality and caption language are remembered.
+- **⚙** sets quality (Auto, up to 1080p), speed (0.5x to 2x), captions and the sleep timer. **CC** turns captions on and off. Your quality and caption language are remembered.
 - **Bottom screen:** under the video are the title, creator (with Subscribe, Like and Save when signed in), and Up next / Comments.
 - **Channels:** tap the creator under a video to open their channel: newest uploads, Subscribe, and **+ Add to Home** to pin them as a tab.
 - **Picks up where you left off** in videos over 3 minutes. A red line on the thumbnail shows how far you got.
+- **Sleep timer** (⚙ > Sleep): 15 to 60 minutes, or stop at the end of the video. The sound fades out over the last 10 seconds, then pauses. Works with the screen off, and starts off each time you open the app.
 - **Screen-off audio** (Setup > Playback, off by default): sound keeps going with the screen off or when you leave the app, with play, pause and next in the notification shade. Only the sound streams while the screen is off.
 - **If YouTube changes something** and a video won't play, the app says so and offers a button to the newest release.
 - **Top screen:** the video fills the screen. Push down, swipe up, or tap the "Up next & comments" tab to pull up a panel with the rest; B, swipe down, or tap the video to put it away.
