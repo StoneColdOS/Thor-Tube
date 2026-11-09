@@ -550,7 +550,7 @@ private fun PlayerControls(app: MainActivity, panelTab: Boolean = false) {
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 50.dp)
+                    .padding(bottom = 62.dp)
                     .clip(RoundedCornerShape(50))
                     .background(Color(0x99000000))
                     .clickable { app.panelOpen = true }
@@ -568,9 +568,11 @@ private fun PlayerControls(app: MainActivity, panelTab: Boolean = false) {
             val dur = app.durationMs.coerceAtLeast(1)
             Slider(
                 value = (shownMs.toFloat() / dur).coerceIn(0f, 1f),
-                onValueChange = { app.seekTo((it * dur).toLong()) },
+                // Drag (or tap) anywhere on the bar; the video jumps there when you let go.
+                onValueChange = { app.touchScrub((it * dur).toLong()) },
+                onValueChangeFinished = { app.finishTouchScrub() },
                 colors = SliderDefaults.colors(thumbColor = p.accent, activeTrackColor = p.accent, inactiveTrackColor = Color(0x80FFFFFF)),
-                modifier = Modifier.height(22.dp),
+                modifier = Modifier.height(36.dp),
             )
         }
     }

@@ -1612,6 +1612,19 @@ class MainActivity : ComponentActivity() {
         scrubStick = 0f
     }
 
+    /** Dragging the seek bar by touch: the big time readout follows your finger. */
+    fun touchScrub(ms: Long) {
+        if (scrubMs == null) controlsPing++
+        scrubMs = ms.coerceIn(0L, durationMs.coerceAtLeast(0L))
+    }
+
+    /** Letting go of the seek bar: jump there once, instead of reloading the video on every step of the drag. */
+    fun finishTouchScrub() {
+        scrubMs?.let { seekTo(it) }
+        scrubMs = null
+        controlsPing++
+    }
+
     /** Tap L2/R2 while browsing: move the highlight about a page up or down. */
     private fun pageJump(down: Boolean) {
         leaveTouchMode()
