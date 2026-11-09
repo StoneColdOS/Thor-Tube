@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -390,7 +391,7 @@ private fun androidx.compose.foundation.layout.ColumnScope.PlayerDetails(app: Ma
                         Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                             ActionPill(if (app.subscribed) "Subscribed" else "Subscribe", strong = !app.subscribed) { app.toggleSubscribe() }
                             ActionPill(if (app.liked) "▲ Liked" else "▲ Like", lit = app.liked) { app.toggleLike() }
-                            ActionPill(if (app.saved) "✓ Saved" else "+ Save", lit = app.saved) { app.toggleSave() }
+                            ActionPill(if (app.saved) "✓ Saved" else "+ Save", lit = app.saved) { app.openSaveSheet() }
                         }
                     }
                 }
@@ -664,6 +665,65 @@ private fun PlayerOptions(app: MainActivity) {
             }
         }
         RoundButton("✕", modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) { app.optionsOpen = false }
+    }
+}
+
+/** Save: Watch later first, then your playlists. Tap one to add the video, tap again to take it out. */
+@Composable
+fun SaveSheet(app: MainActivity, ui: MainActivity.SaveSheetUi) {
+    val p = LocalPalette.current
+    BackHandler { app.closeSaveSheet() }
+    val first = remember { FocusRequester() }
+    LaunchedEffect(ui.loading) { if (!ui.loading) runCatching { first.requestFocus() } }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xA0000000))
+            .clickable(indication = null, interactionSource = null) { app.closeSaveSheet() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier
+                .width(260.dp)
+                .heightIn(max = 340.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(p.bg)
+                .border(1.dp, p.railLine, RoundedCornerShape(16.dp))
+                .clickable(indication = null, interactionSource = null) { }
+                .padding(12.dp),
+        ) {
+            Text("Save to...", color = p.text, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+            when {
+                ui.loading -> Text("Loading your playlists...", color = p.dim, fontSize = 11.sp)
+                ui.error != null -> Text(ui.error, color = p.dim, fontSize = 11.sp)
+                else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    itemsIndexed(ui.items, key = { _, t -> t.playlistId }) { i, t ->
+                        SaveRow(t.title, t.contains, if (i == 0) Modifier.focusRequester(first) else Modifier) { app.toggleSaveTo(t) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SaveRow(title: String, contains: Boolean?, modifier: Modifier, onClick: () -> Unit) {
+    val p = LocalPalette.current
+    var focused by remember { mutableStateOf(false) }
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(p.card)
+            .border(2.dp, if (focused) p.accent else Color.Transparent, RoundedCornerShape(10.dp))
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, color = p.text, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        // A check when it's in there; a plus when it isn't (or YouTube didn't say).
+        Text(if (contains == true) "✓" else "+", color = if (contains == true) p.accent else p.dim, fontSize = 13.sp, fontWeight = FontWeight.Bold)
     }
 }
 

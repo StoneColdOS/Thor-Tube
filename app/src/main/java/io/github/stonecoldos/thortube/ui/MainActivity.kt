@@ -400,6 +400,7 @@ class MainActivity : ComponentActivity() {
                     ) {
                         lastPlaying?.let { MiniPlayer(this@MainActivity, it, Modifier) }
                     }
+                    saveSheet?.let { SaveSheet(this@MainActivity, it) }
                     Toast(toast, Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp))
                 }
                     ScreenBanner(screenBanner, Modifier.align(Alignment.Center))
@@ -856,18 +857,58 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    fun toggleSave() {
+    // ---- Save: Watch later and your playlists
+
+    /** The Save list over the player; null when closed. */
+    class SaveSheetUi(val loading: Boolean = true, val items: List<io.github.stonecoldos.thortube.youtube.SaveTarget> = emptyList(), val error: String? = null)
+    var saveSheet by mutableStateOf<SaveSheetUi?>(null)
+        private set
+
+    fun openSaveSheet() {
         val v = nowPlaying?.video ?: return
         if (!signedIn) return say("Sign in (Setup) to save videos")
-        val on = !saved
-        saved = on
+        saveSheet = SaveSheetUi()
         lifecycleScope.launch {
-            if (YouTubeActions.watchLater(v.id, on)) {
-                say(if (on) "Saved to Watch later" else "Removed from Watch later")
-                libFeeds.remove(LibTab.WATCH_LATER)
+            // YouTube's own "Save to" list knows which playlists already have the video. If that
+            // doesn't answer, fall back to your playlists without the checkmarks.
+            val list = YouTubeActions.saveTargets(v.id)
+                ?: runCatching { YouTubeFeed.playlists() }.getOrNull()?.mapNotNull { pl ->
+                    val id = pl.browseId.removePrefix("VL")
+                    if (id == pl.browseId || id == "LL" || id == "WL") null
+                    else io.github.stonecoldos.thortube.youtube.SaveTarget(id, pl.title, null)
+                }
+            if (saveSheet == null || nowPlaying?.video?.id != v.id) return@launch
+            saveSheet = if (list == null) SaveSheetUi(loading = false, error = "Couldn't load your playlists.")
+            else {
+                // Watch later always comes first.
+                val wl = list.firstOrNull { it.playlistId == "WL" }
+                    ?: io.github.stonecoldos.thortube.youtube.SaveTarget("WL", "Watch later", if (saved) true else null)
+                SaveSheetUi(loading = false, items = listOf(wl) + list.filter { it.playlistId != "WL" })
+            }
+            saveSheet?.items?.let { items -> if (items.any { it.contains != null }) saved = items.any { it.contains == true } }
+        }
+    }
+
+    fun closeSaveSheet() { saveSheet = null }
+
+    /** Tap a playlist in the Save list: add the video, or take it out if it's already there. */
+    fun toggleSaveTo(t: io.github.stonecoldos.thortube.youtube.SaveTarget) {
+        val v = nowPlaying?.video ?: return
+        val on = t.contains != true
+        fun mark(contains: Boolean?) {
+            val s = saveSheet ?: return
+            val items = s.items.map { if (it.playlistId == t.playlistId) it.copy(contains = contains) else it }
+            saveSheet = SaveSheetUi(s.loading, items, s.error)
+            saved = items.any { it.contains == true }
+        }
+        mark(on)
+        lifecycleScope.launch {
+            if (YouTubeActions.inPlaylist(t.playlistId, v.id, on)) {
+                say(if (on) "Saved to ${t.title}" else "Removed from ${t.title}")
+                if (t.playlistId == "WL") libFeeds.remove(LibTab.WATCH_LATER)
             } else {
-                saved = !on
-                say("Couldn't update Watch later")
+                mark(t.contains)
+                say("Couldn't update ${t.title}")
             }
         }
     }
@@ -1039,6 +1080,7 @@ class MainActivity : ComponentActivity() {
         problemNeedsUpdate = false
         optionsOpen = false
         panelOpen = false
+        saveSheet = null
         currentInfo = null
         qualities = emptyList()
         captionTracks = emptyList()

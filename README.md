@@ -29,6 +29,7 @@ Test builds (**Thor-Tube-latest.apk**, the "latest" pre-release) install as a se
 - **Tap** the video for controls. **Double-tap** the left or right side to skip 10 seconds; keep tapping to skip more.
 - **⚙** sets quality (Auto, up to 1080p), speed (0.5x to 2x), captions and the sleep timer. **CC** turns captions on and off. Your quality and caption language are remembered.
 - **Bottom screen:** under the video are the title, creator (with Subscribe, Like and Save when signed in), and Up next / Comments.
+- **Save** opens a list with Watch later and your playlists; tap one to add the video (a ✓ shows where it already is), tap again to take it out.
 - **Channels:** tap the creator under a video to open their channel: newest uploads, Subscribe, and **+ Add to Home** to pin them as a tab.
 - **Picks up where you left off** in videos over 3 minutes. A red line on the thumbnail shows how far you got.
 - **Sleep timer** (⚙ > Sleep): 15 to 60 minutes, or stop at the end of the video. The sound fades out over the last 10 seconds, then pauses. Works with the screen off, and starts off each time you open the app.
